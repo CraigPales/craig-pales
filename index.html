@@ -83,20 +83,28 @@
     <!-- Main Workspace -->
     <main class="main-content">
 
-        <!-- 1. CARTOON STORYBOARD TAB (Viewer Mode Only) -->
+        <!-- 1. CARTOON STORYBOARD TAB (Video Player Mode) -->
         <section id="storyboard-tab" class="tab-content active">
-            <h2>Cartoon Storyboard Director</h2>
-            <p class="subtitle">Observe Craig Pales' storyline scene-by-scene as the story unfolds.</p>
+            <h2>Cartoon Storyboard Player</h2>
+            <p class="subtitle">Watch Craig Pales' storyline slides sequentially with automated voice narration.</p>
 
             <!-- Centered Live Scene Preview Player -->
-            <div class="card" style="max-width: 600px; margin: 0 auto 2rem auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 1.75rem;">
-                <h3 style="width: 100%;"><span style="color: var(--accent-gold);">🎬</span> Live Scene Preview</h3>
-                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; margin-bottom: 1.25rem; width: 100%;">Use the controls below to play through the active storyboard sequence.</p>
+            <div class="card" style="max-width: 600px; margin: 0 auto 2rem auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 1.75rem; border: 1.5px solid var(--accent-orange); box-shadow: 0 8px 32px rgba(255, 106, 0, 0.1);">
+                <h3 style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+                    <span><span style="color: var(--accent-gold);">🎬</span> Storyline Video Player</span>
+                    <span id="player-status" style="font-size: 0.75rem; background: rgba(230, 57, 70, 0.15); padding: 0.25rem 0.6rem; border-radius: 6px; color: var(--accent-red); font-weight: bold; text-transform: uppercase; font-family: var(--font-heading);">Stopped</span>
+                </h3>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; margin-bottom: 1.25rem; width: 100%;">Use the playback controls below to play, pause, or scrub through the episode.</p>
                 
-                <div class="character-preview-container" style="width: 100%; height: 320px; margin-bottom: 1.25rem; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, rgba(22, 26, 37, 0.8) 0%, rgba(10, 12, 16, 0.9) 100%);">
+                <div class="character-preview-container" style="width: 100%; height: 320px; margin-bottom: 0.75rem; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, rgba(22, 26, 37, 0.8) 0%, rgba(10, 12, 16, 0.9) 100%); border-radius: 8px; overflow: hidden; position: relative;">
                     <div id="dashboard-cartoon-preview" class="character-svg-wrapper" style="height: 100%; width: 100%; display: flex; justify-content: center; align-items: center;">
                         <!-- Dynamically compiles active frame SVG -->
                     </div>
+                </div>
+
+                <!-- Video Progress Scrubber Bar -->
+                <div id="video-scrubber" style="width: 100%; display: flex; gap: 4px; margin-bottom: 1.25rem;">
+                    <!-- Segmented progress blocks rendered dynamically in app.js -->
                 </div>
                 
                 <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
@@ -105,21 +113,35 @@
                 </div>
                 <p id="dash-frame-desc" style="font-size: 0.85rem; color: var(--text-secondary); width: 100%; margin-bottom: 1.25rem; min-height: 2.6rem; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-style: italic;">Description goes here...</p>
                 
-                <div style="width: 100%; display: flex; gap: 1rem;">
-                    <button id="dash-prev-btn" class="btn btn-secondary" style="flex: 1; padding: 0.75rem; font-size: 0.9rem;">◀ Previous Scene</button>
-                    <button id="speak-btn" class="btn btn-secondary" style="padding: 0.75rem 1rem; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem;" title="Read Aloud">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                <div style="width: 100%; display: flex; gap: 0.75rem; align-items: center;">
+                    <!-- Back -->
+                    <button id="dash-prev-btn" class="btn btn-secondary" style="padding: 0.75rem 1rem;" title="Skip Back">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+                    </button>
+                    
+                    <!-- Play/Pause -->
+                    <button id="play-pause-btn" class="btn btn-primary" style="flex: 1; padding: 0.75rem; font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.5rem; background: linear-gradient(135deg, var(--accent-orange), var(--accent-red));">
+                        <svg id="play-pause-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        <span id="play-pause-text">Play Cartoon</span>
+                    </button>
+                    
+                    <!-- Speak -->
+                    <button id="speak-btn" class="btn btn-secondary" style="padding: 0.75rem 1.2rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem;" title="Speak Dialogue">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
                         Speak
                     </button>
-                    <button id="dash-next-btn" class="btn btn-primary" style="flex: 1; padding: 0.75rem; font-size: 0.9rem;">Next Scene ▶</button>
+                    
+                    <!-- Next -->
+                    <button id="dash-next-btn" class="btn btn-secondary" style="padding: 0.75rem 1rem;" title="Skip Forward">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+                    </button>
                 </div>
-            </div>
 
-            <!-- Storyboard Timeline view -->
-            <div class="card">
-                <h3 style="margin-bottom: 1rem;"><span style="color: var(--accent-orange);">🎞️</span> Episode Scene Timeline</h3>
-                <div id="timeline-container" class="storyboard-timeline">
-                    <!-- Timeline items loaded here -->
+                <div style="width: 100%; display: flex; justify-content: flex-end; align-items: center; margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                    <label style="font-size: 0.75rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="auto-voice-toggle" checked style="accent-color: var(--accent-orange); cursor: pointer;">
+                        Auto-read dialogue on play
+                    </label>
                 </div>
             </div>
         </section>
@@ -169,7 +191,7 @@
     </main>
 
     <!-- Scripts -->
-    <script src="game.js?v=5"></script>
-    <script src="app.js?v=5"></script>
+    <script src="game.js?v=8"></script>
+    <script src="app.js?v=8"></script>
 </body>
 </html>

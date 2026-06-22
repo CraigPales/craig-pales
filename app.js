@@ -1,8 +1,8 @@
-// Craig Pales Cartoon Studio - Application Logic (Simplified Viewer with Speech Synthesis)
+// Craig Pales Cartoon Studio - Application Logic (Video Player Mode)
 
 // Global State
 const state = {
-    version: 7,
+    version: 8,
     activeTab: 'storyboard',
     storyboard: [
         {
@@ -96,14 +96,19 @@ const state = {
     ],
     selectedFrameId: 1,
     dashboardFrameIndex: 0,
-    gameController: null
+    gameController: null,
+    
+    // Video Player variables
+    isPlaying: false,
+    playTimeout: null,
+    currentUtterance: null
 };
 
 // Persistence functions (wrapped in try/catch to avoid SecurityExceptions if localStorage is disabled)
 function saveToLocalStorage() {
     try {
         if (window.localStorage) {
-            localStorage.setItem('craig_pales_storyboard_v7', JSON.stringify(state.storyboard));
+            localStorage.setItem('craig_pales_storyboard_v8', JSON.stringify(state.storyboard));
             localStorage.setItem('craig_pales_storyboard_version', state.version.toString());
         }
     } catch(e) {
@@ -116,7 +121,7 @@ function loadFromLocalStorage() {
         if (window.localStorage) {
             const savedVersion = localStorage.getItem('craig_pales_storyboard_version');
             if (savedVersion && parseInt(savedVersion, 10) === state.version) {
-                const saved = localStorage.getItem('craig_pales_storyboard_v7');
+                const saved = localStorage.getItem('craig_pales_storyboard_v8');
                 if (saved) {
                     const parsed = JSON.parse(saved);
                     if (Array.isArray(parsed) && parsed.length > 0) {
@@ -126,9 +131,9 @@ function loadFromLocalStorage() {
                     }
                 }
             } else {
-                localStorage.removeItem('craig_pales_storyboard_v5');
                 localStorage.removeItem('craig_pales_storyboard_v6');
                 localStorage.removeItem('craig_pales_storyboard_v7');
+                localStorage.removeItem('craig_pales_storyboard_v8');
                 localStorage.removeItem('craig_pales_storyboard_version');
             }
         }
@@ -162,20 +167,6 @@ function wrapSvgText(text, maxCharsPerLine = 35) {
     return lines.map((line, idx) => {
         return `<tspan x="200" y="${startY + idx * lineSpacing}">${line}</tspan>`;
     }).join('');
-}
-
-// Speak Dialogue Aloud using Web Speech API
-function readDialogueAloud() {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel(); // stop current speech
-    
-    const frame = state.storyboard[state.dashboardFrameIndex];
-    if (frame && frame.dialogue) {
-        const utterance = new SpeechSynthesisUtterance(frame.dialogue);
-        utterance.rate = 0.95; // slightly slower wise pacing
-        utterance.pitch = 0.85; // slightly deeper voice for Craig
-        window.speechSynthesis.speak(utterance);
-    }
 }
 
 // SVG Assets Generator
@@ -618,17 +609,195 @@ function updateDashboardPreview() {
     if (titleEl) titleEl.textContent = frame.title;
     if (counterEl) counterEl.textContent = `${state.dashboardFrameIndex + 1} / ${state.storyboard.length}`;
     if (descEl) descEl.textContent = frame.desc;
+
+    // Synchronize the video scrubber progress segments
+    renderVideoScrubber();
+}
+
+// Render progress scrubber segments
+function renderVideoScrubber() {
+    const scrubber = document.getElementById('video-scrubber');
+    if (!scrubber) return;
+
+    scrubber.innerHTML = '';
+    state.storyboard.forEach((frame, idx) => {
+        const seg = document.createElement('div');
+        seg.style.flex = '1';
+        seg.style.height = '6px';
+        seg.style.borderRadius = '3px';
+        seg.style.cursor = 'pointer';
+        seg.style.transition = 'background-color 0.2s';
+        
+        // Highlight active and watched segments
+        if (idx === state.dashboardFrameIndex) {
+            seg.style.backgroundColor = 'var(--accent-orange)';
+            seg.style.boxShadow = '0 0 8px var(--accent-orange)';
+        } else if (idx < state.dashboardFrameIndex) {
+            seg.style.backgroundColor = 'rgba(255, 106, 0, 0.45)';
+        } else {
+            seg.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+        }
+
+        // Click a segment to jump directly to that scene (scrubbing)
+        seg.addEventListener('click', () => {
+            const wasPlaying = state.isPlaying;
+            if (state.isPlaying) pauseCartoon();
+            
+            state.dashboardFrameIndex = idx;
+            state.selectedFrameId = frame.id;
+            selectStoryboardFrame(state.selectedFrameId);
+            
+            // Resume play if it was playing
+            if (wasPlaying) {
+                playCartoon();
+            }
+        });
+
+        scrubber.appendChild(seg);
+    });
+}
+
+// Play/Pause cartoon player loop
+function togglePlayPause() {
+    if (state.isPlaying) {
+        pauseCartoon();
+    } else {
+        playCartoon();
+    }
+}
+
+function playCartoon() {
+    state.isPlaying = true;
+    
+    // Update Play Button UI
+    const playBtnText = document.getElementById('play-pause-text');
+    const playBtnIcon = document.getElementById('play-pause-icon');
+    const statusEl = document.getElementById('player-status');
+    
+    if (playBtnText) playBtnText.textContent = "Pause Cartoon";
+    if (playBtnIcon) {
+        // Pause icon SVG
+        playBtnIcon.innerHTML = `<rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>`;
+    }
+    if (statusEl) {
+        statusEl.textContent = "Playing";
+        statusEl.style.color = "var(--accent-blue)";
+        statusEl.style.backgroundColor = "rgba(0, 180, 216, 0.15)";
+    }
+
+    playNextSceneStep();
+}
+
+function pauseCartoon() {
+    state.isPlaying = false;
+    if (state.playTimeout) {
+        clearTimeout(state.playTimeout);
+        state.playTimeout = null;
+    }
+    if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+    }
+    
+    // Update Button UI to Play
+    const playBtnText = document.getElementById('play-pause-text');
+    const playBtnIcon = document.getElementById('play-pause-icon');
+    const statusEl = document.getElementById('player-status');
+    
+    if (playBtnText) playBtnText.textContent = "Play Cartoon";
+    if (playBtnIcon) {
+        // Play icon SVG
+        playBtnIcon.innerHTML = `<polygon points="5 3 19 12 5 21 5 3"></polygon>`;
+    }
+    if (statusEl) {
+        statusEl.textContent = "Paused";
+        statusEl.style.color = "var(--accent-red)";
+        statusEl.style.backgroundColor = "rgba(230, 57, 70, 0.15)";
+    }
+}
+
+// Speak Dialogue Aloud using Web Speech API
+function readDialogueAloud(onEndCallback = null) {
+    if (!window.speechSynthesis) {
+        if (onEndCallback) onEndCallback();
+        return;
+    }
+    
+    window.speechSynthesis.cancel(); // stop current speech
+    
+    const frame = state.storyboard[state.dashboardFrameIndex];
+    if (frame && frame.dialogue) {
+        const utterance = new SpeechSynthesisUtterance(frame.dialogue);
+        utterance.rate = 0.95; // slightly slower wise pacing
+        utterance.pitch = 0.85; // slightly deeper voice for Craig
+        
+        if (onEndCallback) {
+            utterance.onend = () => {
+                // Check if we are still playing before calling callback
+                if (state.isPlaying) onEndCallback();
+            };
+            utterance.onerror = () => {
+                if (state.isPlaying) onEndCallback();
+            };
+        }
+        
+        state.currentUtterance = utterance;
+        window.speechSynthesis.speak(utterance);
+    } else {
+        if (onEndCallback) onEndCallback();
+    }
+}
+
+// Main Playback Loop Step
+function playNextSceneStep() {
+    if (!state.isPlaying) return;
+
+    // Render current frame
+    updateDashboardPreview();
+
+    const frame = state.storyboard[state.dashboardFrameIndex];
+    const autoVoiceChecked = document.getElementById('auto-voice-toggle')?.checked;
+
+    const advanceNext = () => {
+        if (!state.isPlaying) return;
+        
+        // Loop back to start if end is reached, else increment
+        if (state.dashboardFrameIndex >= state.storyboard.length - 1) {
+            state.dashboardFrameIndex = 0;
+        } else {
+            state.dashboardFrameIndex++;
+        }
+        
+        state.selectedFrameId = state.storyboard[state.dashboardFrameIndex].id;
+        
+        // Play next step after a tiny slide transition delay
+        state.playTimeout = setTimeout(() => {
+            playNextSceneStep();
+        }, 1200);
+    };
+
+    if (autoVoiceChecked && frame.dialogue) {
+        // Speak first. When speech finishes, advance to next scene
+        readDialogueAloud(() => {
+            advanceNext();
+        });
+    } else {
+        // Voice disabled or no dialogue: wait 4.5 seconds and advance
+        state.playTimeout = setTimeout(() => {
+            advanceNext();
+        }, 4500);
+    }
 }
 
 function initDashboardSlideshow() {
     const prevBtn = document.getElementById('dash-prev-btn');
     const nextBtn = document.getElementById('dash-next-btn');
     const speakBtn = document.getElementById('speak-btn');
+    const playPauseBtn = document.getElementById('play-pause-btn');
 
     if (prevBtn) {
         prevBtn.addEventListener('click', () => {
+            pauseCartoon();
             if (state.storyboard.length > 0) {
-                if (window.speechSynthesis) window.speechSynthesis.cancel();
                 state.dashboardFrameIndex = (state.dashboardFrameIndex - 1 + state.storyboard.length) % state.storyboard.length;
                 state.selectedFrameId = state.storyboard[state.dashboardFrameIndex].id;
                 selectStoryboardFrame(state.selectedFrameId);
@@ -638,8 +807,8 @@ function initDashboardSlideshow() {
 
     if (nextBtn) {
         nextBtn.addEventListener('click', () => {
+            pauseCartoon();
             if (state.storyboard.length > 0) {
-                if (window.speechSynthesis) window.speechSynthesis.cancel();
                 state.dashboardFrameIndex = (state.dashboardFrameIndex + 1) % state.storyboard.length;
                 state.selectedFrameId = state.storyboard[state.dashboardFrameIndex].id;
                 selectStoryboardFrame(state.selectedFrameId);
@@ -649,7 +818,14 @@ function initDashboardSlideshow() {
 
     if (speakBtn) {
         speakBtn.addEventListener('click', () => {
+            // Trigger manual speak without auto-advancing
             readDialogueAloud();
+        });
+    }
+
+    if (playPauseBtn) {
+        playPauseBtn.addEventListener('click', () => {
+            togglePlayPause();
         });
     }
 
@@ -663,7 +839,7 @@ function initRouter() {
 
     navButtons.forEach(btn => {
         btn.addEventListener('click', () => {
-            if (window.speechSynthesis) window.speechSynthesis.cancel();
+            pauseCartoon(); // Stop playing cartoon if user moves tabs
             
             const targetTab = btn.getAttribute('data-tab');
             
@@ -701,75 +877,16 @@ function handleTabChange(tabName) {
     }
 }
 
-// Storyboard Timeline & Editor Binder
-function renderStoryboardTimeline() {
-    const timeline = document.getElementById('timeline-container');
-    if (!timeline) return;
-
-    timeline.innerHTML = '';
-    
-    state.storyboard.forEach((frame, index) => {
-        const frameEl = document.createElement('div');
-        frameEl.className = `storyboard-frame ${state.selectedFrameId === frame.id ? 'active' : ''}`;
-        frameEl.setAttribute('data-frame-id', frame.id);
-
-        const svgMarkup = generateCraigSVG({
-            outfit: frame.outfit,
-            expression: frame.expression,
-            aura: frame.expression === 'fury' ? 'on' : 'off',
-            pose: frame.pose,
-            bg: frame.bg,
-            dialogue: null, // no bubble in tiny thumbnails
-            specialEffect: frame.specialEffect
-        }, "100%", "100%");
-
-        frameEl.innerHTML = `
-            <div class="frame-preview">
-                ${svgMarkup}
-            </div>
-            <div class="frame-info">
-                <div class="frame-title">${frame.title}</div>
-                <div class="frame-desc">${frame.desc}</div>
-            </div>
-        `;
-
-        frameEl.addEventListener('click', () => {
-            if (window.speechSynthesis) window.speechSynthesis.cancel();
-            state.dashboardFrameIndex = index;
-            selectStoryboardFrame(frame.id);
-        });
-
-        timeline.appendChild(frameEl);
-    });
-}
-
 function selectStoryboardFrame(id) {
     state.selectedFrameId = id;
-    
-    // Update active visual frame class
-    document.querySelectorAll('.storyboard-frame').forEach(el => {
-        el.classList.remove('active');
-        if (el.getAttribute('data-frame-id') === id.toString()) {
-            el.classList.add('active');
-        }
-    });
-
     const frame = state.storyboard.find(f => f.id === id);
     if (!frame) return;
-
-    // Update Storyboard Scene Preview
     updateDashboardPreview();
-}
-
-function initStoryboardEditor() {
-    renderStoryboardTimeline();
-    selectStoryboardFrame(state.selectedFrameId);
 }
 
 // Global Initialization on DOM Load
 document.addEventListener('DOMContentLoaded', () => {
     loadFromLocalStorage();
     initRouter();
-    initStoryboardEditor();
     initDashboardSlideshow();
 });
