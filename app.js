@@ -1,8 +1,8 @@
-// Craig Pales Cartoon Studio - Application Logic (Simplified Viewer Only)
+// Craig Pales Cartoon Studio - Application Logic (Simplified Viewer with Speech Synthesis)
 
 // Global State
 const state = {
-    version: 6,
+    version: 7,
     activeTab: 'storyboard',
     storyboard: [
         {
@@ -103,7 +103,7 @@ const state = {
 function saveToLocalStorage() {
     try {
         if (window.localStorage) {
-            localStorage.setItem('craig_pales_storyboard_v6', JSON.stringify(state.storyboard));
+            localStorage.setItem('craig_pales_storyboard_v7', JSON.stringify(state.storyboard));
             localStorage.setItem('craig_pales_storyboard_version', state.version.toString());
         }
     } catch(e) {
@@ -116,7 +116,7 @@ function loadFromLocalStorage() {
         if (window.localStorage) {
             const savedVersion = localStorage.getItem('craig_pales_storyboard_version');
             if (savedVersion && parseInt(savedVersion, 10) === state.version) {
-                const saved = localStorage.getItem('craig_pales_storyboard_v6');
+                const saved = localStorage.getItem('craig_pales_storyboard_v7');
                 if (saved) {
                     const parsed = JSON.parse(saved);
                     if (Array.isArray(parsed) && parsed.length > 0) {
@@ -128,11 +128,53 @@ function loadFromLocalStorage() {
             } else {
                 localStorage.removeItem('craig_pales_storyboard_v5');
                 localStorage.removeItem('craig_pales_storyboard_v6');
+                localStorage.removeItem('craig_pales_storyboard_v7');
                 localStorage.removeItem('craig_pales_storyboard_version');
             }
         }
     } catch(e) {
         console.warn("Storage warning: LocalStorage is read-restricted.", e);
+    }
+}
+
+// Text wrapping utility for SVG speech balloon
+function wrapSvgText(text, maxCharsPerLine = 35) {
+    if (!text) return '';
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+    
+    words.forEach(word => {
+        if ((currentLine + word).length > maxCharsPerLine) {
+            lines.push(currentLine.trim());
+            currentLine = word + ' ';
+        } else {
+            currentLine += word + ' ';
+        }
+    });
+    if (currentLine) {
+        lines.push(currentLine.trim());
+    }
+    
+    // Generate tspans
+    const lineSpacing = 16;
+    const startY = 55 - ((lines.length - 1) * lineSpacing) / 2;
+    return lines.map((line, idx) => {
+        return `<tspan x="200" y="${startY + idx * lineSpacing}">${line}</tspan>`;
+    }).join('');
+}
+
+// Speak Dialogue Aloud using Web Speech API
+function readDialogueAloud() {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel(); // stop current speech
+    
+    const frame = state.storyboard[state.dashboardFrameIndex];
+    if (frame && frame.dialogue) {
+        const utterance = new SpeechSynthesisUtterance(frame.dialogue);
+        utterance.rate = 0.95; // slightly slower wise pacing
+        utterance.pitch = 0.85; // slightly deeper voice for Craig
+        window.speechSynthesis.speak(utterance);
     }
 }
 
@@ -527,8 +569,8 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
                     <!-- Bubble path -->
                     <path d="M 50 20 L 350 20 A 15 15 0 0 1 365 35 L 365 75 A 15 15 0 0 1 350 90 L 220 90 L 200 105 L 180 90 L 50 90 A 15 15 0 0 1 35 75 L 35 35 A 15 15 0 0 1 50 20 Z" fill="#ffffff" stroke="#000000" stroke-width="3" filter="drop-shadow(0 4px 6px rgba(0,0,0,0.15))"/>
                     <!-- Bubble Dialogue text -->
-                    <text x="200" y="55" font-family="'Inter', sans-serif" font-size="12" font-weight="600" fill="#111827" text-anchor="middle" width="300">
-                        ${dialogue.length > 45 ? `<tspan x="200" dy="-8">${dialogue.substring(0, 42)}...</tspan><tspan x="200" dy="18">${dialogue.substring(42)}</tspan>` : dialogue}
+                    <text x="200" font-family="'Inter', sans-serif" font-size="12" font-weight="600" fill="#111827" text-anchor="middle" width="300">
+                        ${wrapSvgText(dialogue)}
                     </text>
                 </g>
             ` : ''}
@@ -581,10 +623,12 @@ function updateDashboardPreview() {
 function initDashboardSlideshow() {
     const prevBtn = document.getElementById('dash-prev-btn');
     const nextBtn = document.getElementById('dash-next-btn');
+    const speakBtn = document.getElementById('speak-btn');
 
     if (prevBtn) {
         prevBtn.addEventListener('click', () => {
             if (state.storyboard.length > 0) {
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
                 state.dashboardFrameIndex = (state.dashboardFrameIndex - 1 + state.storyboard.length) % state.storyboard.length;
                 state.selectedFrameId = state.storyboard[state.dashboardFrameIndex].id;
                 selectStoryboardFrame(state.selectedFrameId);
@@ -595,10 +639,17 @@ function initDashboardSlideshow() {
     if (nextBtn) {
         nextBtn.addEventListener('click', () => {
             if (state.storyboard.length > 0) {
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
                 state.dashboardFrameIndex = (state.dashboardFrameIndex + 1) % state.storyboard.length;
                 state.selectedFrameId = state.storyboard[state.dashboardFrameIndex].id;
                 selectStoryboardFrame(state.selectedFrameId);
             }
+        });
+    }
+
+    if (speakBtn) {
+        speakBtn.addEventListener('click', () => {
+            readDialogueAloud();
         });
     }
 
@@ -612,6 +663,8 @@ function initRouter() {
 
     navButtons.forEach(btn => {
         btn.addEventListener('click', () => {
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+            
             const targetTab = btn.getAttribute('data-tab');
             
             // Update Active states in sidebar
@@ -681,6 +734,7 @@ function renderStoryboardTimeline() {
         `;
 
         frameEl.addEventListener('click', () => {
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
             state.dashboardFrameIndex = index;
             selectStoryboardFrame(frame.id);
         });
