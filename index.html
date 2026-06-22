@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Craig Pales: Cartoon Storyboard & Game</title>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        function showErrorBanner(message, stack) {
+            const errorBanner = document.createElement('div');
+            errorBanner.style.position = 'fixed';
+            errorBanner.style.top = '0';
+            errorBanner.style.left = '0';
+            errorBanner.style.width = '100vw';
+            errorBanner.style.background = '#e63946';
+            errorBanner.style.color = '#fff';
+            errorBanner.style.padding = '1.5rem';
+            errorBanner.style.zIndex = '99999';
+            errorBanner.style.fontFamily = 'monospace';
+            errorBanner.style.whiteSpace = 'pre-wrap';
+            errorBanner.innerHTML = message + '<br><br>' + (stack || '');
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '✕ Dismiss';
+            closeBtn.style.float = 'right';
+            closeBtn.style.background = 'rgba(0,0,0,0.3)';
+            closeBtn.style.border = 'none';
+            closeBtn.style.color = '#fff';
+            closeBtn.style.padding = '0.25rem 0.5rem';
+            closeBtn.style.cursor = 'pointer';
+            closeBtn.addEventListener('click', function() { errorBanner.remove(); });
+            
+            errorBanner.appendChild(closeBtn);
+            if (document.body) {
+                document.body.appendChild(errorBanner);
+            } else {
+                document.documentElement.appendChild(errorBanner);
+            }
+        }
+
+        window.addEventListener('error', function(e) {
+            showErrorBanner('<strong>JS Error:</strong> ' + e.message + ' at ' + e.filename + ':' + e.lineno, e.error ? e.error.stack : '');
+        });
+
+        window.addEventListener('unhandledrejection', function(e) {
+            showErrorBanner('<strong>Unhandled Promise Rejection:</strong> ' + e.reason, e.reason && e.reason.stack ? e.reason.stack : '');
+        });
+    </script>
+</head>
+<body>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="logo-container">
+            <div class="logo-icon">CP</div>
+            <div class="logo-text">
+                <h1>Craig Pales</h1>
+                <p>Forbidden Vigilante</p>
+            </div>
+        </div>
+        
+        <nav class="nav-menu">
+            <li class="nav-item active">
+                <button data-tab="storyboard">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                    Cartoon Storyboard
+                </button>
+            </li>
+            <li class="nav-item">
+                <button data-tab="game">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
+                    Vigilante Game
+                </button>
+            </li>
+        </nav>
+
+        <div class="sidebar-footer">
+            <p>Antigravity Engine &copy; 2026</p>
+            <p style="margin-top: 0.25rem; opacity: 0.5;">Project Craig Pales</p>
+        </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="main-content">
+
+        <!-- 1. CARTOON STORYBOARD TAB (Merged dashboard slideshow and editor) -->
+        <section id="storyboard-tab" class="tab-content active">
+            <h2>Cartoon Storyboard Director</h2>
+            <p class="subtitle">Direct Craig Pales' storyline scene-by-scene. Edit dialogues, backgrounds, and poses to build your episode.</p>
+
+            <div class="grid-2">
+                <!-- Left Column: Storyboard Slide Preview -->
+                <div class="card" style="display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 1.75rem;">
+                    <h3 style="width: 100%;"><span style="color: var(--accent-gold);">🎬</span> Live Scene Preview</h3>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; margin-bottom: 1.25rem; width: 100%;">Use the controls below to play through the active storyboard sequence.</p>
+                    
+                    <div class="character-preview-container" style="width: 100%; height: 320px; margin-bottom: 1.25rem; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, rgba(22, 26, 37, 0.8) 0%, rgba(10, 12, 16, 0.9) 100%);">
+                        <div id="dashboard-cartoon-preview" class="character-svg-wrapper" style="height: 100%; width: 100%; display: flex; justify-content: center; align-items: center;">
+                            <!-- Dynamically compiles active frame SVG -->
+                        </div>
+                    </div>
+                    
+                    <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <h4 id="dash-frame-title" style="font-family: var(--font-heading); color: #fff; font-size: 1.2rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 75%;">Scene Title</h4>
+                        <span id="dash-frame-counter" style="font-size: 0.75rem; background: rgba(255, 106, 0, 0.15); padding: 0.25rem 0.6rem; border-radius: 6px; color: var(--accent-orange); font-family: var(--font-heading); font-weight: 700;">1 / 1</span>
+                    </div>
+                    <p id="dash-frame-desc" style="font-size: 0.85rem; color: var(--text-secondary); width: 100%; margin-bottom: 1.25rem; min-height: 2.6rem; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-style: italic;">Description goes here...</p>
+                    
+                    <div style="width: 100%; display: flex; gap: 1rem;">
+                        <button id="dash-prev-btn" class="btn btn-secondary" style="flex: 1; padding: 0.75rem; font-size: 0.9rem;">◀ Previous Scene</button>
+                        <button id="dash-next-btn" class="btn btn-primary" style="flex: 1; padding: 0.75rem; font-size: 0.9rem;">Next Scene ▶</button>
+                    </div>
+                </div>
+
+                <!-- Right Column: Frame Editor Inputs -->
+                <div class="card">
+                    <h3>Frame Editor</h3>
+                    <div class="editor-form" style="margin-top: 1rem;">
+                        <div class="form-group">
+                            <label for="frame-title-input">Scene Title</label>
+                            <input type="text" id="frame-title-input" placeholder="e.g. Shaolin Kidnapping">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="frame-desc-input">Action Description</label>
+                            <textarea id="frame-desc-input" rows="2" placeholder="Describe the scene choreography..."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="frame-dialogue-input">Speech Balloon Text</label>
+                            <input type="text" id="frame-dialogue-input" placeholder="e.g. I warned you never to use that!">
+                        </div>
+
+                        <div class="grid-2" style="gap: 1rem; margin-bottom: 0;">
+                            <div class="form-group">
+                                <label for="frame-bg-select">Scenery</label>
+                                <select id="frame-bg-select">
+                                    <option value="new-york">NYC Alleyway</option>
+                                    <option value="shaolin">Shaolin Temple</option>
+                                    <option value="dojo">Shaolin Dojo</option>
+                                    <option value="subway">Subway Station</option>
+                                    <option value="rooftop">NYC Rooftop</option>
+                                    <option value="studio">Plain Canvas</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="frame-outfit-select">Outfit</label>
+                                <select id="frame-outfit-select">
+                                    <option value="monk-robe">Monk Robe</option>
+                                    <option value="young-robe">Young Monk Robe</option>
+                                    <option value="vigilante-outfit">Vigilante Suit</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid-2" style="gap: 1rem; margin-bottom: 0;">
+                            <div class="form-group">
+                                <label for="frame-expr-select">Mood</label>
+                                <select id="frame-expr-select">
+                                    <option value="calm">Calm Monk</option>
+                                    <option value="determined">Determined</option>
+                                    <option value="fury">Forbidden Fury</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="frame-pose-select">Pose</label>
+                                <select id="frame-pose-select">
+                                    <option value="standing-calm">Standing</option>
+                                    <option value="fighting">Fist Guard</option>
+                                    <option value="victory">Victory Stance</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="frame-effect-select">Special Visual Effects</label>
+                            <select id="frame-effect-select">
+                                <option value="">No Effects</option>
+                                <option value="training">Shaolin Training (Elder Teacher)</option>
+                                <option value="ambush">Syndicate Ambush Silhouette</option>
+                                <option value="chains">Broken Wall Chains</option>
+                                <option value="cuffs">Broken Handcuffs</option>
+                                <option value="blood">Fist Dismemberment Splatter</option>
+                                <option value="rooftop-fury">Moonlit Fury Glow</option>
+                            </select>
+                        </div>
+
+                        <div class="button-row">
+                            <button id="add-frame-btn" class="btn btn-primary">+ Add Scene</button>
+                            <button id="delete-frame-btn" class="btn btn-secondary">Delete Scene</button>
+                        </div>
+                        <div class="button-row" style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+                            <button id="export-episode-btn" class="btn btn-secondary" style="flex: 1; padding: 0.6rem 0.5rem; font-size: 0.85rem;">📤 Export JSON</button>
+                            <button id="import-episode-btn" class="btn btn-secondary" style="flex: 1; padding: 0.6rem 0.5rem; font-size: 0.85rem;">📥 Import JSON</button>
+                            <input type="file" id="import-episode-file" accept=".json" style="display: none;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Storyboard Timeline view -->
+            <div class="card" style="margin-top: 2rem;">
+                <h3 style="margin-bottom: 1rem;"><span style="color: var(--accent-orange);">🎞️</span> Episode Scene Timeline</h3>
+                <div id="timeline-container" class="storyboard-timeline">
+                    <!-- Timeline items loaded here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. RETRO ACTION GAME TAB -->
+        <section id="game-tab" class="tab-content">
+            <h2>Vigilante Action Game</h2>
+            <p class="subtitle">Stage 1: Gritty New York streets. Control Craig and slice gang clones.</p>
+
+            <div class="game-container-layout">
+                <!-- Game Canvas Box -->
+                <div class="game-viewport-wrapper">
+                    <canvas id="game-canvas"></canvas>
+                </div>
+
+                <!-- Game Controls D-Pad Overlay -->
+                <div class="game-dashboard-controls">
+                    <div class="card" style="margin-bottom: 1.5rem;">
+                        <h3>Keyboard Controls</h3>
+                        <p style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-secondary); line-height: 1.6;">
+                            <strong>Walk left/right:</strong> Left/Right Arrow or A/D<br>
+                            <strong>Jump up:</strong> Up Arrow or W or Space<br>
+                            <strong>Punch:</strong> J key (Slices gang thugs)<br>
+                            <strong>Kick:</strong> K key (Extended sweep slice)
+                        </p>
+                    </div>
+
+                    <!-- Virtual D-Pad -->
+                    <div class="card" style="padding: 1.5rem;">
+                        <h3 style="font-size: 1.15rem; margin-bottom: 0.75rem;">Virtual Controller</h3>
+                        <div class="dpad-layout">
+                            <div class="dpad-directions">
+                                <button id="btn-left" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.6rem 0.8rem; flex-grow: 1;">◀ Walk Left</button>
+                                <button id="btn-right" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.6rem 0.8rem; flex-grow: 1;">Walk Right ▶</button>
+                            </div>
+                            <div class="dpad-actions">
+                                <button id="btn-jump" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.6rem 0.8rem; background: linear-gradient(135deg, var(--accent-blue), #0077b6);">▲ JUMP</button>
+                                <button id="btn-punch" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.6rem 0.8rem; background: linear-gradient(135deg, var(--accent-red), #900c3f);">👊 PUNCH</button>
+                                <button id="btn-kick" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.6rem 0.8rem; background: linear-gradient(135deg, var(--accent-orange), #d00000);">🦵 KICK</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Scripts -->
+    <script src="game.js?v=5"></script>
+    <script src="app.js?v=5"></script>
+</body>
+</html>

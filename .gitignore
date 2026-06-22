@@ -1,0 +1,5 @@
+.DS_Store
+.gemini/
+*.log
+*.zip
+*.tar.gz
