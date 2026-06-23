@@ -201,7 +201,7 @@ class BloodParticle {
     }
 }
 
-// Sliced debris entities (split in half animation)
+// Sliced debris entities (split in half animation & cartoon meat dismemberment)
 class SlicedDebris {
     constructor(x, y, vx, vy, type, part) {
         this.x = x;
@@ -209,19 +209,35 @@ class SlicedDebris {
         this.vx = vx;
         this.vy = vy;
         this.rotation = Math.random() * Math.PI * 2;
-        this.vRotation = (Math.random() - 0.5) * 0.2;
+        this.vRotation = (Math.random() - 0.5) * 0.25;
         this.type = type; // 'thug' or 'boss'
         this.part = part; // 'top' or 'bottom'
         this.life = 1.0;
+        this.onGround = false;
+        
+        // Randomize the specific meat chunk type (e.g., T-bone steak, round steak with marrow bone, ribs)
+        this.meatStyle = Math.floor(Math.random() * 3);
     }
 
     update() {
-        this.x += this.vx;
-        this.vy += 0.4; // gravity
-        this.y += this.vy;
-        this.rotation += this.vRotation;
-        this.life -= 0.015;
-        this.vx *= 0.98;
+        if (!this.onGround) {
+            this.x += this.vx;
+            this.vy += 0.4; // gravity
+            this.y += this.vy;
+            this.rotation += this.vRotation;
+            
+            // Ground bounce/stop
+            if (this.y >= 415) {
+                this.y = 415 + (Math.random() - 0.5) * 5;
+                this.vy = 0;
+                this.vx = 0;
+                this.vRotation = 0;
+                this.onGround = true;
+            }
+        }
+        
+        // Slower decay so meat chunks persist on street pavement
+        this.life -= 0.008;
     }
 
     draw(ctx) {
@@ -231,99 +247,79 @@ class SlicedDebris {
         ctx.globalAlpha = Math.max(0, this.life);
 
         ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 3.5;
 
-        if (this.type === 'thug') {
-            ctx.fillStyle = '#1c1c1e'; // black jacket
-            if (this.part === 'top') {
-                // Head + top chest
-                ctx.beginPath();
-                ctx.arc(0, -15, 12, 0, Math.PI * 2); // head
-                ctx.fill();
-                ctx.stroke();
-                
-                ctx.fillStyle = '#ffe3a8'; // skin
-                ctx.beginPath();
-                ctx.arc(-2, -15, 1.5, 0, Math.PI * 2); // eye
-                ctx.fill();
+        // Render dismembered cartoon meat cuts (steak/chops/ribs)
+        if (this.part === 'top') {
+            // Draw a T-bone steak / prime rib cut structure
+            // Crimson meat outer body
+            ctx.fillStyle = '#b31a1a';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 26, 18, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
 
-                ctx.fillStyle = '#1c1c1e';
-                ctx.beginPath();
-                ctx.rect(-10, -5, 20, 15); // chest
-                ctx.fill();
-                ctx.stroke();
+            // Outer layer of white fat trimming
+            ctx.strokeStyle = '#fbf5eb';
+            ctx.lineWidth = 3.5;
+            ctx.beginPath();
+            ctx.arc(0, 0, 22, -Math.PI*0.8, Math.PI*0.8);
+            ctx.stroke();
 
-                // blood at cut edge
-                ctx.fillStyle = '#b30000';
-                ctx.beginPath();
-                ctx.ellipse(0, 10, 10, 3, 0, 0, Math.PI * 2);
-                ctx.fill();
-            } else {
-                // Legs
-                ctx.fillStyle = '#2d3748'; // jeans
-                ctx.beginPath();
-                ctx.rect(-10, 0, 9, 20); // left leg
-                ctx.rect(1, 0, 9, 20); // right leg
-                ctx.fill();
-                ctx.stroke();
+            // Bone in the center (classic T-Bone shape)
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 3;
+            ctx.fillStyle = '#f4f1de'; // Bone ivory white
+            
+            ctx.beginPath();
+            // Vertical bar
+            ctx.rect(-4, -12, 8, 24);
+            // Horizontal crossbar
+            ctx.rect(-12, -4, 24, 8);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Tiny marrow center
+            ctx.fillStyle = '#d4a373';
+            ctx.beginPath();
+            ctx.arc(0, 0, 3, 0, Math.PI*2);
+            ctx.fill();
 
-                ctx.fillStyle = '#111'; // boots
-                ctx.beginPath();
-                ctx.rect(-12, 20, 11, 6);
-                ctx.rect(1, 20, 11, 6);
-                ctx.fill();
-                ctx.stroke();
-
-                // bloody cut surface
-                ctx.fillStyle = '#b30000';
-                ctx.beginPath();
-                ctx.ellipse(0, 0, 10, 3.5, 0, 0, Math.PI * 2);
-                ctx.fill();
-            }
+            // Blood droplets on cut surface
+            ctx.fillStyle = '#ff0000';
+            ctx.beginPath();
+            ctx.arc(-12, 6, 3, 0, Math.PI*2);
+            ctx.arc(10, -6, 2, 0, Math.PI*2);
+            ctx.fill();
         } else {
-            // Boss (larger and burgundy jacket)
-            ctx.fillStyle = '#5c0d12'; // burgundy
-            if (this.part === 'top') {
-                ctx.beginPath();
-                ctx.arc(0, -20, 16, 0, Math.PI * 2); // large head
-                ctx.fill();
-                ctx.stroke();
+            // Draw a cartoon round steak ring with a central circular marrow bone
+            ctx.fillStyle = '#8a0f0f'; // Darker meat red
+            ctx.beginPath();
+            ctx.arc(0, 0, 24, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
 
-                ctx.fillStyle = '#ffe3a8';
-                ctx.beginPath();
-                ctx.arc(-3, -20, 2, 0, Math.PI * 2); // eye
-                ctx.fill();
+            // Rib cross sections or fat lining
+            ctx.strokeStyle = '#fbf5eb';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, 20, 0, Math.PI*2);
+            ctx.stroke();
 
-                ctx.fillStyle = '#5c0d12';
-                ctx.beginPath();
-                ctx.rect(-14, -5, 28, 20); // chest
-                ctx.fill();
-                ctx.stroke();
+            // Central circle hollow bone
+            ctx.strokeStyle = '#000000';
+            ctx.fillStyle = '#f4f1de'; // Bone
+            ctx.beginPath();
+            ctx.arc(0, 0, 9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
 
-                ctx.fillStyle = '#b30000';
-                ctx.beginPath();
-                ctx.ellipse(0, 15, 14, 4, 0, 0, Math.PI * 2);
-                ctx.fill();
-            } else {
-                ctx.fillStyle = '#222'; // pants
-                ctx.beginPath();
-                ctx.rect(-14, 0, 12, 25);
-                ctx.rect(2, 0, 12, 25);
-                ctx.fill();
-                ctx.stroke();
-
-                ctx.fillStyle = '#444'; // giant boots
-                ctx.beginPath();
-                ctx.rect(-17, 25, 15, 8);
-                ctx.rect(2, 25, 15, 8);
-                ctx.fill();
-                ctx.stroke();
-
-                ctx.fillStyle = '#b30000';
-                ctx.beginPath();
-                ctx.ellipse(0, 0, 14, 4.5, 0, 0, Math.PI * 2);
-                ctx.fill();
-            }
+            // Hollow marrow hole
+            ctx.fillStyle = '#b31a1a'; // Bloody center
+            ctx.beginPath();
+            ctx.arc(0, 0, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
         }
 
         ctx.restore();
@@ -627,18 +623,24 @@ class RetroGameController {
     }
 
     spawnGore(x, y, type) {
-        // Spawn flying sliced halves
+        // Spawn flying sliced halves (we push multiple steak cuts)
         const forceX = this.player.facing * 3;
-        this.debris.push(new SlicedDebris(x - 5, y - 10, forceX + (Math.random() - 0.5)*2, -4 + (Math.random() - 0.2)*-3, type, 'top'));
-        this.debris.push(new SlicedDebris(x + 5, y + 10, -forceX * 0.5 + (Math.random() - 0.5)*2, -2 + (Math.random() - 0.2)*-2, type, 'bottom'));
+        this.debris.push(new SlicedDebris(x - 10, y - 15, forceX + (Math.random() - 0.5)*3, -5 + (Math.random() - 0.2)*-4, type, 'top'));
+        this.debris.push(new SlicedDebris(x + 10, y + 15, -forceX * 0.4 + (Math.random() - 0.5)*3, -3 + (Math.random() - 0.2)*-3, type, 'bottom'));
+        
+        // Push an extra middle T-bone steak slice for maximum dismemberment feel
+        this.debris.push(new SlicedDebris(x, y, forceX * 0.8 + (Math.random() - 0.5)*4, -6 + (Math.random() - 0.2)*-4, type, 'top'));
 
-        // Spawn blood particles
-        for (let i = 0; i < 15; i++) {
+        // Spawn a massive shower of blood particles (increased from 15 to 45)
+        for (let i = 0; i < 45; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 2 + Math.random() * 8;
             this.particles.push(new BloodParticle(
-                x, y,
-                (Math.random() - 0.5) * 8 + (this.player.facing * 3),
-                (Math.random() - 0.8) * 8,
-                2 + Math.random() * 4
+                x + (Math.random() - 0.5) * 10, 
+                y + (Math.random() - 0.5) * 15,
+                Math.cos(angle) * speed + (this.player.facing * 4),
+                Math.sin(angle) * speed - (1 + Math.random() * 5),
+                2.5 + Math.random() * 5.5
             ));
         }
     }
