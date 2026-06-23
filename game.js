@@ -446,6 +446,211 @@ class SliceSlashEffect {
     }
 }
 
+// Thrown Knife Projectiles (used by player and knife-thrower thugs)
+class KnifeProjectile {
+    constructor(x, y, vx, vy, isPlayerOwned = false) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.isPlayerOwned = isPlayerOwned;
+        this.width = 16;
+        this.height = 6;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        if (this.vx < 0) {
+            ctx.scale(-1, 1);
+        }
+        ctx.fillStyle = '#e2e8f0'; // bright silver steel
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1.5;
+        
+        // Draw a sleek knife shape
+        ctx.beginPath();
+        ctx.moveTo(-8, -2);
+        ctx.lineTo(4, -2);
+        ctx.lineTo(8, 0); // pointed tip
+        ctx.lineTo(4, 2);
+        ctx.lineTo(-8, 2);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        
+        // Handle
+        ctx.fillStyle = '#475569'; // dark slate handle
+        ctx.fillRect(-12, -1.5, 4, 3);
+        ctx.fillStyle = '#b91c1c'; // red wrap
+        ctx.fillRect(-14, -2, 2, 4);
+        
+        ctx.restore();
+    }
+}
+
+// Destructible Crates / Barrels
+class DestructibleObject {
+    constructor(x, y, type = 'crate', content = 'knife') {
+        this.x = x; // world X coordinate
+        this.y = y;
+        this.type = type; // 'crate' or 'barrel'
+        this.content = content; // 'knife', 'meat', or 'gold'
+        this.width = 36;
+        this.height = 36;
+        this.health = 2; // requires 2 hits to break
+        this.flashTimer = 0;
+    }
+    
+    draw(ctx, scrollOffset) {
+        const sx = this.x - scrollOffset;
+        if (sx < -50 || sx > 850) return; // out of screen
+        
+        ctx.save();
+        if (this.flashTimer > 0) {
+            this.flashTimer--;
+            ctx.filter = 'brightness(1.8)';
+        }
+        
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3.5;
+        
+        if (this.type === 'crate') {
+            // Draw wooden crate
+            ctx.fillStyle = '#a0522d'; // sienna brown
+            ctx.beginPath();
+            ctx.rect(sx, this.y, this.width, this.height);
+            ctx.fill(); ctx.stroke();
+            
+            // Planks lines
+            ctx.strokeStyle = '#5c2d16';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            // diagonal planks X
+            ctx.moveTo(sx + 4, this.y + 4);
+            ctx.lineTo(sx + this.width - 4, this.y + this.height - 4);
+            ctx.moveTo(sx + this.width - 4, this.y + 4);
+            ctx.lineTo(sx + 4, this.y + this.height - 4);
+            // borders
+            ctx.rect(sx + 3, this.y + 3, this.width - 6, this.height - 6);
+            ctx.stroke();
+        } else {
+            // Draw barrel
+            ctx.fillStyle = '#b25d38'; // terracotta brown
+            ctx.beginPath();
+            ctx.roundRect(sx, this.y, this.width, this.height, [6]);
+            ctx.fill(); ctx.stroke();
+            
+            // Metal hoops
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(sx, this.y + 8, this.width, 4);
+            ctx.fillRect(sx, this.y + 24, this.width, 4);
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(sx, this.y + 8, this.width, 4);
+            ctx.strokeRect(sx, this.y + 24, this.width, 4);
+            
+            // Vertical barrel lines
+            ctx.strokeStyle = '#5c2d16';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(sx + 10, this.y + 1); ctx.quadraticCurveTo(sx + 8, this.y + 18, sx + 10, this.y + this.height - 1);
+            ctx.moveTo(sx + 26, this.y + 1); ctx.quadraticCurveTo(sx + 28, this.y + 18, sx + 26, this.y + this.height - 1);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+}
+
+// Items dropped by destructibles
+class PickableItem {
+    constructor(x, y, type = 'knife') {
+        this.x = x;
+        this.y = y;
+        this.vy = -3.5; // slight upward bounce on spawn
+        this.gravity = 0.25;
+        this.groundY = y + 12; // align to base level of crate/barrel
+        this.type = type; // 'knife', 'meat', 'gold'
+        this.width = 24;
+        this.height = 24;
+        this.bobOffset = 0;
+        this.isGrounded = false;
+    }
+    
+    update() {
+        if (!this.isGrounded) {
+            this.vy += this.gravity;
+            this.y += this.vy;
+            if (this.y >= this.groundY) {
+                this.y = this.groundY;
+                this.vy = 0;
+                this.isGrounded = true;
+            }
+        } else {
+            this.bobOffset = Math.sin(performance.now() * 0.007) * 4;
+        }
+    }
+    
+    draw(ctx, scrollOffset) {
+        const sx = this.x - scrollOffset;
+        if (sx < -50 || sx > 850) return;
+        
+        ctx.save();
+        ctx.translate(sx + 12, this.y + 12 + this.bobOffset);
+        
+        ctx.shadowColor = this.type === 'meat' ? '#ef4444' : (this.type === 'gold' ? '#fbbf24' : '#60a5fa');
+        ctx.shadowBlur = 10;
+        
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2.5;
+        
+        if (this.type === 'meat') {
+            // Juicy T-bone steak
+            ctx.fillStyle = '#ef4444'; // Red meat
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 11, 7, Math.PI / 6, 0, Math.PI * 2);
+            ctx.fill(); ctx.stroke();
+            
+            // Bone
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(-4, -1, 3, 0, Math.PI * 2);
+            ctx.fill(); ctx.stroke();
+        } else if (this.type === 'gold') {
+            // Gold bar
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath();
+            ctx.roundRect(-10, -5, 20, 10, [2]);
+            ctx.fill(); ctx.stroke();
+            // Highlight
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-8, -2); ctx.lineTo(8, -2);
+            ctx.stroke();
+        } else {
+            // Knife item (angled)
+            ctx.rotate(-Math.PI / 4);
+            ctx.fillStyle = '#e2e8f0';
+            ctx.beginPath();
+            ctx.rect(-8, -2, 12, 4);
+            ctx.lineTo(8, 0);
+            ctx.lineTo(4, 2);
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            
+            ctx.fillStyle = '#b91c1c';
+            ctx.fillRect(-12, -1.5, 4, 3);
+        }
+        
+        ctx.restore();
+    }
+}
+
 // Main Retro Game Controller Class
 class RetroGameController {
     constructor(canvasId) {
@@ -476,6 +681,7 @@ class RetroGameController {
             health: 100,
             score: 0,
             attackType: '', // 'punch' or 'kick'
+            knives: 0,
         };
 
         this.groundY = 350;
@@ -490,9 +696,94 @@ class RetroGameController {
         this.particles = [];
         this.debris = [];
         this.slashes = [];
+        
+        // Level definition data
+        this.currentLevel = 1;
+        this.levelData = [
+            {
+                name: "Stage 1: Dojo Training Grounds",
+                background: "dojo",
+                length: 1800,
+                bossName: "Sensei O'Kuma",
+                bossStyle: 'elder',
+                platforms: [
+                    { x: 450, y: 270, w: 180, h: 16 },
+                    { x: 800, y: 190, w: 220, h: 16 },
+                    { x: 1200, y: 270, w: 180, h: 16 }
+                ],
+                destructibles: [
+                    { x: 300, y: 314, type: 'barrel', content: 'meat' },
+                    { x: 600, y: 234, type: 'crate', content: 'knife' },
+                    { x: 950, y: 314, type: 'crate', content: 'gold' },
+                    { x: 1400, y: 314, type: 'barrel', content: 'knife' }
+                ]
+            },
+            {
+                name: "Stage 2: Brooklyn Subway Path",
+                background: "subway",
+                length: 2000,
+                bossName: "Subway Slasher Billy",
+                bossStyle: 'leather-red',
+                platforms: [
+                    { x: 400, y: 280, w: 160, h: 16 },
+                    { x: 650, y: 200, w: 160, h: 16 },
+                    { x: 900, y: 280, w: 160, h: 16 },
+                    { x: 1300, y: 200, w: 240, h: 16 }
+                ],
+                destructibles: [
+                    { x: 350, y: 314, type: 'crate', content: 'knife' },
+                    { x: 750, y: 164, type: 'barrel', content: 'meat' },
+                    { x: 1100, y: 314, type: 'crate', content: 'meat' },
+                    { x: 1500, y: 164, type: 'crate', content: 'knife' }
+                ]
+            },
+            {
+                name: "Stage 3: Gritty New York Streets",
+                background: "new-york",
+                length: 2200,
+                bossName: "Goon Master Craig Clones",
+                bossStyle: 'vigilante-clone',
+                platforms: [
+                    { x: 350, y: 270, w: 200, h: 16 },
+                    { x: 700, y: 190, w: 200, h: 16 },
+                    { x: 1050, y: 270, w: 200, h: 16 },
+                    { x: 1500, y: 190, w: 200, h: 16 }
+                ],
+                destructibles: [
+                    { x: 500, y: 234, type: 'barrel', content: 'meat' },
+                    { x: 800, y: 154, type: 'crate', content: 'knife' },
+                    { x: 1200, y: 314, type: 'barrel', content: 'gold' },
+                    { x: 1700, y: 314, type: 'crate', content: 'meat' }
+                ]
+            },
+            {
+                name: "Stage 4: Rooftop Showdown",
+                background: "rooftop",
+                length: 2400,
+                bossName: "The Dark Arts Master Craig",
+                bossStyle: 'dark-master',
+                platforms: [
+                    { x: 400, y: 280, w: 180, h: 16 },
+                    { x: 750, y: 200, w: 180, h: 16 },
+                    { x: 1100, y: 280, w: 180, h: 16 },
+                    { x: 1500, y: 200, w: 240, h: 16 },
+                    { x: 1900, y: 280, w: 180, h: 16 }
+                ],
+                destructibles: [
+                    { x: 450, y: 244, type: 'crate', content: 'meat' },
+                    { x: 900, y: 314, type: 'barrel', content: 'knife' },
+                    { x: 1300, y: 244, type: 'crate', content: 'knife' },
+                    { x: 1700, y: 314, type: 'barrel', content: 'meat' }
+                ]
+            }
+        ];
+
+        this.platforms = [];
+        this.destructibles = [];
+        this.items = [];
 
         // Game loop states
-        this.gameState = 'playing'; // 'start', 'playing', 'gameover', 'victory'
+        this.gameState = 'playing'; // 'start', 'playing', 'gameover', 'victory', 'levelclear'
         this.thugSpawnTimer = 0;
         this.keys = {};
 
@@ -504,10 +795,50 @@ class RetroGameController {
 
         this.bindVirtualButtons();
 
+        // Load level 1
+        this.loadLevel(1);
+
         // Start Animation Loop
         this.lastTime = performance.now();
         this.animate = this.animate.bind(this);
         requestAnimationFrame(this.animate);
+    }
+
+    loadLevel(lvlNum) {
+        this.currentLevel = lvlNum;
+        const data = this.levelData[lvlNum - 1];
+        this.levelLength = data.length;
+        this.scrollOffset = 0;
+        this.gameProgress = 0;
+        this.boss = null;
+        this.thugs = [];
+        this.projectiles = [];
+        this.debris = [];
+        this.slashes = [];
+        this.particles = [];
+        
+        // Deep copy platforms and destructibles
+        this.platforms = data.platforms.map(p => ({...p}));
+        this.destructibles = data.destructibles.map(d => new DestructibleObject(d.x, d.y, d.type, d.content));
+        this.items = [];
+    }
+
+    advanceLevel() {
+        if (this.currentLevel < 4) {
+            this.currentLevel++;
+            this.loadLevel(this.currentLevel);
+            this.player.health = Math.min(100, this.player.health + 40); // Restore health
+            this.player.x = 100;
+            this.player.y = this.groundY;
+            this.player.vy = 0;
+            this.player.state = 'idle';
+            this.gameState = 'playing';
+            gameAudio.playVictory();
+        } else {
+            this.gameState = 'victory';
+            this.player.state = 'victory';
+            gameAudio.playVictory();
+        }
     }
 
     destroy() {
@@ -521,6 +852,13 @@ class RetroGameController {
         gameAudio.init(); // enable sound on first interaction
         const code = e.code;
         this.keys[code] = true;
+
+        if (this.gameState === 'levelclear') {
+            if (code === 'KeyJ' || code === 'KeyZ' || code === 'Space' || code === 'Enter') {
+                this.advanceLevel();
+            }
+            return;
+        }
 
         if (this.gameState === 'gameover' || this.gameState === 'victory') {
             this.resetGame();
@@ -554,8 +892,24 @@ class RetroGameController {
         bindBtn('btn-left', () => { this.keys['KeyA'] = true; this.keys['ArrowLeft'] = true; }, () => { this.keys['KeyA'] = false; this.keys['ArrowLeft'] = false; });
         bindBtn('btn-right', () => { this.keys['KeyD'] = true; this.keys['ArrowRight'] = true; }, () => { this.keys['KeyD'] = false; this.keys['ArrowRight'] = false; });
         bindBtn('btn-jump', () => { this.keys['Space'] = true; }, () => { this.keys['Space'] = false; });
-        bindBtn('btn-punch', () => { this.triggerAttack('punch'); });
-        bindBtn('btn-kick', () => { this.triggerAttack('kick'); });
+        bindBtn('btn-punch', () => {
+            if (this.gameState === 'gameover' || this.gameState === 'victory') {
+                this.resetGame();
+            } else if (this.gameState === 'levelclear') {
+                this.advanceLevel();
+            } else {
+                this.triggerAttack('punch');
+            }
+        });
+        bindBtn('btn-kick', () => {
+            if (this.gameState === 'gameover' || this.gameState === 'victory') {
+                this.resetGame();
+            } else if (this.gameState === 'levelclear') {
+                this.advanceLevel();
+            } else {
+                this.triggerAttack('kick');
+            }
+        });
     }
 
     unbindVirtualButtons() {
@@ -577,21 +931,20 @@ class RetroGameController {
 
     resetGame() {
         this.player.health = 100;
-        this.player.score = 0;
+        this.player.vy = 0;
         this.player.x = 100;
         this.player.y = this.groundY;
-        this.player.vy = 0;
         this.player.state = 'idle';
-        this.scrollOffset = 0;
-        this.gameProgress = 0;
-        this.thugs = [];
-        this.boss = null;
-        this.projectiles = [];
-        this.particles = [];
-        this.debris = [];
-        this.slashes = [];
+        this.player.knives = 0;
+        
+        if (this.currentLevel >= 4 && this.gameState === 'victory') {
+            this.currentLevel = 1;
+            this.player.score = 0;
+        }
+        
         this.gameState = 'playing';
         this.thugSpawnTimer = 0;
+        this.loadLevel(this.currentLevel);
     }
 
     triggerAttack(type) {
@@ -599,6 +952,20 @@ class RetroGameController {
         this.player.state = 'attacking';
         this.player.attackType = type;
         this.player.stateTimer = 10; // attack lasts 10 frames
+        
+        if (type === 'punch' && this.player.knives > 0) {
+            this.player.knives--;
+            gameAudio.playSlice(); // throw knife sound
+            const kVx = this.player.facing * 8.5;
+            this.projectiles.push(new KnifeProjectile(
+                this.player.x + (this.player.facing === 1 ? 40 : 5),
+                this.player.y + 30,
+                kVx,
+                0,
+                true // isPlayerOwned = true
+            ));
+            return; // skip close range check since we threw a blade!
+        }
         
         gameAudio.playPunch();
 
@@ -633,7 +1000,33 @@ class RetroGameController {
             }
         }
 
-        // 2. Check boss
+        // 2. Check destructibles
+        for (let i = this.destructibles.length - 1; i >= 0; i--) {
+            const dest = this.destructibles[i];
+            const dist = Math.abs((this.player.x + this.player.width/2) - (dest.x - this.scrollOffset + dest.width/2));
+            const yDist = Math.abs(this.player.y - dest.y);
+            const correctDirection = (this.player.facing === 1 && dest.x - this.scrollOffset > this.player.x) ||
+                                     (this.player.facing === -1 && dest.x - this.scrollOffset < this.player.x);
+
+            if (dist < range && yDist < 40 && correctDirection) {
+                dest.health--;
+                dest.flashTimer = 8;
+                gameAudio.playPunch();
+                
+                if (dest.health <= 0) {
+                    gameAudio.playGlassShatter();
+                    // Spawn wooden shards
+                    for (let k = 0; k < 6; k++) {
+                        this.particles.push(new GoreParticle(dest.x + dest.width/2, dest.y + dest.height/2, '#a0522d'));
+                    }
+                    // Spawn pickable item
+                    this.items.push(new PickableItem(dest.x, dest.y, dest.content));
+                    this.destructibles.splice(i, 1);
+                }
+            }
+        }
+
+        // 3. Check boss
         if (this.boss) {
             const dist = Math.abs((this.player.x + this.player.width/2) - (this.boss.x + this.boss.width/2));
             const yDist = Math.abs(this.player.y - this.boss.y);
@@ -649,8 +1042,14 @@ class RetroGameController {
                     gameAudio.playVictory();
                     this.spawnGore(this.boss.x + this.boss.width/2, this.boss.y + this.boss.height/2, 'boss');
                     this.boss = null;
-                    this.gameState = 'victory';
-                    this.player.state = 'victory';
+                    
+                    if (this.currentLevel === 4) {
+                        this.gameState = 'victory';
+                        this.player.state = 'victory';
+                    } else {
+                        this.gameState = 'levelclear';
+                        this.player.state = 'victory';
+                    }
                 } else {
                     gameAudio.playSlice();
                     this.boss.vx = this.player.facing * 4; // knockback
@@ -721,7 +1120,7 @@ class RetroGameController {
     }
 
     update() {
-        if (this.gameState === 'gameover' || this.gameState === 'victory') {
+        if (this.gameState === 'gameover' || this.gameState === 'victory' || this.gameState === 'levelclear') {
             // Update particles/debris even in post-game
             this.particles.forEach(p => p.update());
             this.debris.forEach(d => d.update());
@@ -759,21 +1158,69 @@ class RetroGameController {
 
         // Jump Mechanics
         const isJumpKey = this.keys['KeyW'] || this.keys['ArrowUp'] || this.keys['Space'];
-        if (isJumpKey && this.player.y >= this.groundY && this.player.state !== 'hurt') {
+        let playerOnGround = this.player.y >= this.groundY;
+        
+        // Check if player is on any platform
+        if (!playerOnGround) {
+            const pxLeft = this.player.x + 10;
+            const pxRight = this.player.x + this.player.width - 10;
+            for (const plat of this.platforms) {
+                const platScreenX = plat.x - this.scrollOffset;
+                if (pxRight > platScreenX && pxLeft < platScreenX + plat.w) {
+                    if (Math.abs((this.player.y + this.player.height) - plat.y) < 2) {
+                        playerOnGround = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (isJumpKey && playerOnGround && this.player.state !== 'hurt') {
             this.player.vy = -11.5;
             this.player.state = 'jumping';
             gameAudio.playJump();
         }
 
-        // Apply Gravity
+        // Apply Gravity & Platform Landing Check
         this.player.vy += 0.55; // gravity force
-        this.player.y += this.player.vy;
+        const nextY = this.player.y + this.player.vy;
+        const prevBottom = this.player.y + this.player.height;
+        const nextBottom = nextY + this.player.height;
         
-        if (this.player.y >= this.groundY) {
-            this.player.y = this.groundY;
+        let landed = false;
+        let targetY = this.groundY;
+        
+        if (nextY >= this.groundY) {
+            landed = true;
+            targetY = this.groundY;
+        } else {
+            // Check platforms landing (only if falling down)
+            if (this.player.vy >= 0) {
+                const pxLeft = this.player.x + 10;
+                const pxRight = this.player.x + this.player.width - 10;
+                for (const plat of this.platforms) {
+                    const platScreenX = plat.x - this.scrollOffset;
+                    if (pxRight > platScreenX && pxLeft < platScreenX + plat.w) {
+                        if (prevBottom <= plat.y && nextBottom >= plat.y) {
+                            landed = true;
+                            targetY = plat.y - this.player.height;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (landed) {
+            this.player.y = targetY;
             this.player.vy = 0;
             if (this.player.state === 'jumping') {
                 this.player.state = 'idle';
+            }
+        } else {
+            this.player.y = nextY;
+            if (this.player.y < this.groundY && this.player.state !== 'hurt' && this.player.state !== 'attacking') {
+                this.player.state = 'jumping';
             }
         }
 
@@ -803,6 +1250,7 @@ class RetroGameController {
                 this.thugSpawnTimer = 0;
                 if (this.thugs.length < 3) {
                     // Spawn a thug from right edge
+                    const isThrower = (this.currentLevel > 1 && Math.random() < 0.15 + this.currentLevel * 0.08);
                     this.thugs.push({
                         x: 820,
                         y: this.groundY,
@@ -810,21 +1258,27 @@ class RetroGameController {
                         height: 75,
                         speed: 1.8 + Math.random() * 0.8,
                         facing: -1,
-                        style: Math.floor(Math.random() * 5) // random thug style matching reference image
+                        style: Math.floor(Math.random() * 5),
+                        isKnifeThrower: isThrower,
+                        throwCooldown: 40 + Math.random() * 60
                     });
                 }
             }
         } else {
             // Level Scroll at 100%: Spawn Boss if not spawned yet
             if (!this.boss && this.gameState === 'playing') {
+                const lvlData = this.levelData[this.currentLevel - 1];
+                const maxHp = 5 + this.currentLevel * 2;
                 this.boss = {
+                    name: lvlData.bossName,
+                    style: lvlData.bossStyle,
                     x: 820,
                     y: this.groundY,
                     width: 55,
                     height: 95,
-                    speed: 1.2,
-                    health: 5,
-                    maxHealth: 5,
+                    speed: 1.0 + this.currentLevel * 0.1,
+                    health: maxHp,
+                    maxHealth: maxHp,
                     facing: -1,
                     throwTimer: 60,
                     flashTimer: 0,
@@ -838,17 +1292,41 @@ class RetroGameController {
         for (let i = this.thugs.length - 1; i >= 0; i--) {
             const thug = this.thugs[i];
             
-            // Thugs walk towards Craig
-            const dir = (this.player.x - thug.x > 0) ? 1 : -1;
-            thug.x += dir * thug.speed;
-            thug.facing = dir;
-
-            // Collision check: Thug punches player
-            const dist = Math.abs((this.player.x + this.player.width/2) - (thug.x + thug.width/2));
+            // Thugs walk towards Craig or keep distance if throwers
+            const dist = Math.abs((this.player.x + this.player.width/2) - (thug.x - this.scrollOffset + thug.width/2));
             const yDist = Math.abs(this.player.y - thug.y);
+            const dir = (this.player.x - (thug.x - this.scrollOffset) > 0) ? 1 : -1;
+            
+            if (thug.isKnifeThrower) {
+                // Keep range distance
+                if (dist > 250) {
+                    thug.x += dir * thug.speed;
+                    thug.facing = dir;
+                } else {
+                    thug.facing = dir;
+                    thug.throwCooldown--;
+                    if (thug.throwCooldown <= 0) {
+                        thug.throwCooldown = 110 + Math.random() * 80;
+                        // Throw knife
+                        const kVx = thug.facing * 5.5;
+                        this.projectiles.push(new KnifeProjectile(
+                            thug.x + (thug.facing === 1 ? 40 : -10),
+                            thug.y + 30,
+                            kVx,
+                            0,
+                            false
+                        ));
+                    }
+                }
+            } else {
+                // Regular walk up and punch
+                thug.x += dir * thug.speed;
+                thug.facing = dir;
 
-            if (dist < 32 && yDist < 30 && this.player.state !== 'hurt' && this.player.state !== 'victory') {
-                this.triggerPlayerHurt(10);
+                // Collision check: Thug punches player
+                if (dist < 32 && yDist < 30 && this.player.state !== 'hurt' && this.player.state !== 'victory') {
+                    this.triggerPlayerHurt(10);
+                }
             }
         }
 
@@ -875,18 +1353,44 @@ class RetroGameController {
 
             if (this.boss.flashTimer > 0) this.boss.flashTimer--;
 
-            // Boss attacks: throw bottle
+            // Boss attacks
             this.boss.throwTimer--;
             if (this.boss.throwTimer <= 0) {
                 this.boss.throwTimer = 110 + Math.random() * 60; // 2-3 seconds
-                // Throw action
                 const bVx = this.boss.facing * 6.5;
-                this.projectiles.push(new BottleProjectile(
-                    this.boss.x + (this.boss.facing === 1 ? 50 : -10),
-                    this.boss.y + 25,
-                    bVx,
-                    -3
-                ));
+                
+                if (this.boss.style === 'elder') {
+                    // Sensei throws a fast shuriken (using KnifeProjectile)
+                    this.projectiles.push(new KnifeProjectile(
+                        this.boss.x + (this.boss.facing === 1 ? 50 : -10),
+                        this.boss.y + 25,
+                        bVx * 1.2,
+                        0,
+                        false
+                    ));
+                } else if (this.boss.style === 'leather-red') {
+                    // Billy throws knives
+                    this.projectiles.push(new KnifeProjectile(
+                        this.boss.x + (this.boss.facing === 1 ? 50 : -10),
+                        this.boss.y + 25,
+                        bVx,
+                        0,
+                        false
+                    ));
+                } else if (this.boss.style === 'dark-master') {
+                    // Dark Master throws 3 knives spread shot!
+                    this.projectiles.push(new KnifeProjectile(this.boss.x + (this.boss.facing === 1 ? 50 : -10), this.boss.y + 25, bVx, -1.5, false));
+                    this.projectiles.push(new KnifeProjectile(this.boss.x + (this.boss.facing === 1 ? 50 : -10), this.boss.y + 25, bVx, 0, false));
+                    this.projectiles.push(new KnifeProjectile(this.boss.x + (this.boss.facing === 1 ? 50 : -10), this.boss.y + 25, bVx, 1.5, false));
+                } else {
+                    // Clone/default: throws bottles
+                    this.projectiles.push(new BottleProjectile(
+                        this.boss.x + (this.boss.facing === 1 ? 50 : -10),
+                        this.boss.y + 25,
+                        bVx,
+                        -3
+                    ));
+                }
             }
 
             // Contact damage with Boss
@@ -897,26 +1401,108 @@ class RetroGameController {
             }
         }
 
-        // Update Projectiles (thrown bottles)
+        // Update Projectiles (bottles/knives)
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
-            const bottle = this.projectiles[i];
-            bottle.update();
+            const proj = this.projectiles[i];
+            proj.update();
 
-            // Check collision with player
-            const dist = Math.abs(bottle.x - (this.player.x + this.player.width/2));
-            const yDist = Math.abs(bottle.y - (this.player.y + this.player.height/2));
+            let destroyed = false;
 
-            if (dist < 25 && yDist < 35 && this.player.state !== 'hurt') {
-                gameAudio.playGlassShatter();
-                this.triggerPlayerHurt(15);
-                this.projectiles.splice(i, 1);
-                continue;
+            if (proj.isPlayerOwned) {
+                // Check thug hits
+                for (let j = this.thugs.length - 1; j >= 0; j--) {
+                    const thug = this.thugs[j];
+                    const dist = Math.abs(proj.x - (thug.x - this.scrollOffset + thug.width/2));
+                    const yDist = Math.abs(proj.y - (thug.y + thug.height/2));
+                    if (dist < 25 && yDist < 40) {
+                        gameAudio.playSlice();
+                        this.player.score += 150;
+                        this.spawnGore(thug.x + thug.width/2, thug.y + thug.height/2, 'thug', thug.style);
+                        this.thugs.splice(j, 1);
+                        destroyed = true;
+                        break;
+                    }
+                }
+                
+                // Check boss hits
+                if (!destroyed && this.boss) {
+                    const dist = Math.abs(proj.x - this.boss.x);
+                    const yDist = Math.abs(proj.y - (this.boss.y + this.boss.height/2));
+                    if (dist < 30 && yDist < 50) {
+                        this.boss.health--;
+                        this.boss.flashTimer = 8;
+                        gameAudio.playSlice();
+                        destroyed = true;
+                        
+                        if (this.boss.health <= 0) {
+                            gameAudio.playVictory();
+                            this.spawnGore(this.boss.x + this.boss.width/2, this.boss.y + this.boss.height/2, 'boss');
+                            this.boss = null;
+                            if (this.currentLevel === 4) {
+                                this.gameState = 'victory';
+                                this.player.state = 'victory';
+                            } else {
+                                this.gameState = 'levelclear';
+                                this.player.state = 'victory';
+                            }
+                        } else {
+                            this.boss.vx = this.player.facing * 3;
+                            this.boss.vy = -2.5;
+                        }
+                    }
+                }
+            } else {
+                // Enemy projectile hitting player
+                const dist = Math.abs(proj.x - (this.player.x + this.player.width/2));
+                const yDist = Math.abs(proj.y - (this.player.y + this.player.height/2));
+
+                if (dist < 25 && yDist < 35 && this.player.state !== 'hurt' && this.player.state !== 'victory') {
+                    if (proj instanceof BottleProjectile) {
+                        gameAudio.playGlassShatter();
+                        this.triggerPlayerHurt(15);
+                    } else {
+                        gameAudio.playSlice();
+                        this.triggerPlayerHurt(12);
+                    }
+                    destroyed = true;
+                }
             }
 
-            // Ground impact
-            if (bottle.y > this.groundY + 60) {
-                gameAudio.playGlassShatter();
+            // Impact ground or out of bounds
+            if (!destroyed && (proj.y > this.groundY + 60 || proj.x < -100 || proj.x > 900)) {
+                if (proj instanceof BottleProjectile) {
+                    gameAudio.playGlassShatter();
+                }
+                destroyed = true;
+            }
+
+            if (destroyed) {
                 this.projectiles.splice(i, 1);
+            }
+        }
+
+        // Update Pickable Items
+        for (let i = this.items.length - 1; i >= 0; i--) {
+            const item = this.items[i];
+            item.update();
+            
+            // Check collision with player
+            const dist = Math.abs((item.x - this.scrollOffset) - this.player.x);
+            const yDist = Math.abs(item.y - this.player.y);
+            
+            if (dist < 30 && yDist < 60) {
+                // Pick up!
+                if (item.type === 'meat') {
+                    this.player.health = Math.min(100, this.player.health + 35);
+                    gameAudio.playVictory();
+                } else if (item.type === 'knife') {
+                    this.player.knives += 3;
+                    gameAudio.playVictory();
+                } else if (item.type === 'gold') {
+                    this.player.score += 500;
+                    gameAudio.playVictory();
+                }
+                this.items.splice(i, 1);
             }
         }
 
@@ -956,13 +1542,31 @@ class RetroGameController {
 
     draw() {
         // Clear screen
-        this.ctx.fillStyle = '#080c14'; // dark sky
+        const bgType = this.levelData[this.currentLevel - 1].background;
+        if (bgType === 'dojo') {
+            this.ctx.fillStyle = '#2b1810';
+        } else if (bgType === 'subway') {
+            this.ctx.fillStyle = '#1c1917';
+        } else if (bgType === 'rooftop') {
+            this.ctx.fillStyle = '#0a0e17';
+        } else {
+            this.ctx.fillStyle = '#080c14'; // dark sky
+        }
         this.ctx.fillRect(0, 0, 800, 480);
 
         // Parallax Layers
         this.drawParallaxStars();
         this.drawParallaxBuildings();
         this.drawRoadAndWalls();
+
+        // Draw Platforms
+        this.drawPlatforms();
+
+        // Draw Destructibles
+        this.destructibles.forEach(d => d.draw(this.ctx, this.scrollOffset));
+
+        // Draw Items
+        this.items.forEach(item => item.draw(this.ctx, this.scrollOffset));
 
         // Draw Debris (behind characters)
         this.debris.forEach(d => d.draw(this.ctx));
@@ -993,15 +1597,21 @@ class RetroGameController {
             this.drawGameOverScreen();
         } else if (this.gameState === 'victory') {
             this.drawVictoryScreen();
+        } else if (this.gameState === 'levelclear') {
+            this.drawLevelClearScreen();
         }
     }
 
     // --- Parallax Background Artworks ---
 
     drawParallaxStars() {
+        const bgType = this.levelData[this.currentLevel - 1].background;
+        if (bgType === 'dojo' || bgType === 'subway') {
+            return; // Indoor stage
+        }
+
         const offset = this.scrollOffset * 0.05;
         this.ctx.fillStyle = '#ffffff';
-        // Static and moving tiny stars
         const stars = [
             { x: 50, y: 40 }, { x: 180, y: 70 }, { x: 300, y: 30 },
             { x: 450, y: 90 }, { x: 600, y: 50 }, { x: 740, y: 80 }
@@ -1016,18 +1626,134 @@ class RetroGameController {
         let mx = (620 - offset * 0.5);
         this.ctx.save();
         this.ctx.globalAlpha = 0.85;
-        this.ctx.fillStyle = '#f4f1de';
-        this.ctx.beginPath();
-        this.ctx.arc(mx, 75, 25, 0, Math.PI * 2);
-        this.ctx.fill();
+        if (bgType === 'rooftop') {
+            this.ctx.fillStyle = '#fbbf24'; // large golden moon
+            this.ctx.shadowColor = '#d97706';
+            this.ctx.shadowBlur = 40;
+            this.ctx.beginPath();
+            this.ctx.arc(mx, 75, 35, 0, Math.PI * 2);
+            this.ctx.fill();
+        } else {
+            this.ctx.fillStyle = '#f4f1de';
+            this.ctx.beginPath();
+            this.ctx.arc(mx, 75, 25, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
         this.ctx.restore();
     }
 
     drawParallaxBuildings() {
+        const bgType = this.levelData[this.currentLevel - 1].background;
+        
+        if (bgType === 'dojo') {
+            // Draw Shoji screens sliding behind
+            const offset = this.scrollOffset * 0.2;
+            this.ctx.fillStyle = '#f5f5f4'; // paper color
+            
+            for (let i = 0; i < 5; i++) {
+                let px = (i * 300 - offset) % 1500;
+                if (px < -260) px += 1500;
+                
+                // Screen body
+                this.ctx.fillRect(px, 120, 240, 230);
+                
+                // Grids
+                this.ctx.strokeStyle = '#442816'; // wood frame
+                this.ctx.lineWidth = 4;
+                this.ctx.strokeRect(px, 120, 240, 230);
+                
+                this.ctx.strokeStyle = '#6b4226';
+                this.ctx.lineWidth = 1.5;
+                // horizontal dividers
+                for (let y = 120 + 38; y < 350; y += 38) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(px, y); this.ctx.lineTo(px + 240, y);
+                    this.ctx.stroke();
+                }
+                // vertical dividers
+                for (let x = px + 48; x < px + 240; x += 48) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x, 120); this.ctx.lineTo(x, 350);
+                    this.ctx.stroke();
+                }
+            }
+            return;
+        }
+        
+        if (bgType === 'subway') {
+            // Draw subway tiled wall background
+            const offset = this.scrollOffset * 0.2;
+            this.ctx.fillStyle = '#d6d3d1'; // tiled wall color
+            this.ctx.fillRect(0, 100, 800, 250);
+            
+            // Tile grid lines
+            this.ctx.strokeStyle = '#a8a29e';
+            this.ctx.lineWidth = 1;
+            let tileOffset = -offset % 40;
+            for (let x = tileOffset; x < 840; x += 40) {
+                this.ctx.beginPath(); this.ctx.moveTo(x, 100); this.ctx.lineTo(x, 350); this.ctx.stroke();
+            }
+            for (let y = 100; y < 350; y += 20) {
+                this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(800, y); this.ctx.stroke();
+            }
+            
+            // Dark arched tunnel alcoves
+            this.ctx.fillStyle = '#1c1917';
+            for (let i = 0; i < 4; i++) {
+                let ax = (i * 350 - offset) % 1400;
+                if (ax < -120) ax += 1400;
+                
+                this.ctx.beginPath();
+                this.ctx.roundRect(ax, 140, 120, 210, [40, 40, 0, 0]);
+                this.ctx.fill();
+            }
+            return;
+        }
+
+        if (bgType === 'rooftop') {
+            // Draw rooftop water tower and distant buildings silhouette
+            const offset = this.scrollOffset * 0.25;
+            this.ctx.fillStyle = '#0f172a'; // very dark slate
+            
+            const structures = [
+                { x: 50, w: 100, h: 280, type: 'watertower' },
+                { x: 220, w: 140, h: 240, type: 'building' },
+                { x: 420, w: 90, h: 200, type: 'building' },
+                { x: 580, w: 160, h: 300, type: 'building' }
+            ];
+            
+            structures.forEach(s => {
+                let sx = (s.x - offset) % 850;
+                if (sx < -s.w) sx += 850;
+                
+                if (s.type === 'watertower') {
+                    // Legs
+                    this.ctx.strokeStyle = '#0f172a';
+                    this.ctx.lineWidth = 4;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(sx + 20, 350); this.ctx.lineTo(sx + 30, 270);
+                    this.ctx.moveTo(sx + 80, 350); this.ctx.lineTo(sx + 70, 270);
+                    this.ctx.stroke();
+                    // Tower body
+                    this.ctx.fillRect(sx + 25, 200, 50, 70);
+                    // Cone roof
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(sx + 20, 200);
+                    this.ctx.lineTo(sx + 50, 160);
+                    this.ctx.lineTo(sx + 80, 200);
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                } else {
+                    this.ctx.fillRect(sx, 350 - s.h, s.w, s.h);
+                }
+            });
+            return;
+        }
+
+        // Default: New York Street buildings
         const offset = this.scrollOffset * 0.25;
         this.ctx.fillStyle = '#141a29'; // dark skyline color
         
-        // Simple rectangular skyscrapers blocks
         const buildings = [
             { x: 20, w: 90, h: 220 },
             { x: 150, w: 110, h: 300 },
@@ -1050,19 +1776,140 @@ class RetroGameController {
                     this.ctx.fillRect(wx, wy, 8, 12);
                 }
             }
-            this.ctx.fillStyle = '#141a29'; // restore building color
+            this.ctx.fillStyle = '#141a29';
             this.ctx.globalAlpha = 1.0;
         });
     }
 
     drawRoadAndWalls() {
         const offset = this.scrollOffset;
+        const bgType = this.levelData[this.currentLevel - 1].background;
         
-        // Dark brick wall background
-        this.ctx.fillStyle = '#221814'; // brick red/grey
+        if (bgType === 'dojo') {
+            // Dojo wooden floor and pillars
+            this.ctx.fillStyle = '#442816'; // wooden panels wall
+            this.ctx.fillRect(0, 240, 800, 110);
+            
+            this.ctx.strokeStyle = '#2b1810';
+            this.ctx.lineWidth = 2;
+            for (let y = 240; y < 350; y += 28) {
+                this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(800, y); this.ctx.stroke();
+            }
+            
+            // Wooden floor base
+            this.ctx.fillStyle = '#8b5a2b';
+            this.ctx.fillRect(0, 350, 800, 130);
+            
+            this.ctx.strokeStyle = '#2b1810';
+            this.ctx.lineWidth = 5;
+            this.ctx.beginPath(); this.ctx.moveTo(0, 350); this.ctx.lineTo(800, 350); this.ctx.stroke();
+            
+            this.ctx.strokeStyle = '#5c3d24';
+            this.ctx.lineWidth = 2;
+            let floorOffset = -offset % 90;
+            for (let fx = floorOffset; fx < 850; fx += 90) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(fx, 350);
+                this.ctx.lineTo(fx - 50, 480);
+                this.ctx.stroke();
+            }
+            
+            // Dojo Pillars (wooden logs)
+            let pillarX = (300 - offset) % 500;
+            if (pillarX < -40) pillarX += 500;
+            this.ctx.save();
+            this.ctx.fillStyle = '#5c3d24';
+            this.ctx.strokeStyle = '#1a0e08';
+            this.ctx.lineWidth = 4;
+            this.ctx.beginPath();
+            this.ctx.roundRect(pillarX, 100, 35, 250, [2]);
+            this.ctx.fill(); this.ctx.stroke();
+            this.ctx.restore();
+            return;
+        }
+        
+        if (bgType === 'subway') {
+            this.ctx.fillStyle = '#334155'; // tiled platform wall bottom
+            this.ctx.fillRect(0, 240, 800, 110);
+            
+            this.ctx.fillStyle = '#1e293b'; // concrete platform
+            this.ctx.fillRect(0, 350, 800, 130);
+            
+            // Yellow safety line
+            this.ctx.fillStyle = '#eab308';
+            this.ctx.fillRect(0, 350, 800, 15);
+            this.ctx.strokeStyle = '#000';
+            this.ctx.lineWidth = 1.5;
+            this.ctx.strokeRect(0, 350, 800, 15);
+            
+            this.ctx.strokeStyle = '#0f172a';
+            this.ctx.lineWidth = 2.5;
+            let tileOffset = -offset % 100;
+            for (let fx = tileOffset; fx < 850; fx += 100) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(fx, 365);
+                this.ctx.lineTo(fx - 40, 480);
+                this.ctx.stroke();
+            }
+            
+            // Subway Steel Pillars (Red)
+            let pillarX = (250 - offset) % 400;
+            if (pillarX < -40) pillarX += 400;
+            this.ctx.save();
+            this.ctx.fillStyle = '#b91c1c';
+            this.ctx.strokeStyle = '#000';
+            this.ctx.lineWidth = 4;
+            this.ctx.fillRect(pillarX, 80, 30, 270);
+            this.ctx.strokeRect(pillarX, 80, 30, 270);
+            this.ctx.fillStyle = '#7f1d1d';
+            this.ctx.fillRect(pillarX + 5, 100, 20, 10);
+            this.ctx.fillRect(pillarX + 5, 200, 20, 10);
+            this.ctx.fillRect(pillarX + 5, 300, 20, 10);
+            this.ctx.restore();
+            return;
+        }
+
+        if (bgType === 'rooftop') {
+            this.ctx.fillStyle = '#0f172a';
+            this.ctx.fillRect(0, 240, 800, 110);
+            
+            this.ctx.strokeStyle = '#334155';
+            this.ctx.lineWidth = 1.5;
+            let fenceOffset = -offset % 30;
+            this.ctx.save();
+            this.ctx.beginPath();
+            for (let fx = fenceOffset; fx < 820; fx += 20) {
+                this.ctx.moveTo(fx, 240); this.ctx.lineTo(fx + 20, 350);
+                this.ctx.moveTo(fx + 20, 240); this.ctx.lineTo(fx, 350);
+            }
+            this.ctx.stroke();
+            this.ctx.restore();
+            
+            this.ctx.fillStyle = '#475569';
+            this.ctx.fillRect(0, 350, 800, 130);
+            
+            this.ctx.fillStyle = '#334155';
+            this.ctx.fillRect(0, 350, 800, 10);
+            this.ctx.strokeStyle = '#000';
+            this.ctx.lineWidth = 2.5;
+            this.ctx.strokeRect(0, 350, 800, 10);
+            
+            this.ctx.strokeStyle = '#1e293b';
+            this.ctx.lineWidth = 2;
+            let crackOffset = -offset % 120;
+            for (let fx = crackOffset; fx < 850; fx += 120) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(fx, 360);
+                this.ctx.lineTo(fx - 30, 480);
+                this.ctx.stroke();
+            }
+            return;
+        }
+
+        // Default New York Street
+        this.ctx.fillStyle = '#221814'; // brick wall
         this.ctx.fillRect(0, 240, 800, 110);
 
-        // Brick line patterns (moving at midground speed)
         this.ctx.strokeStyle = '#1b120f';
         this.ctx.lineWidth = 1.5;
         let wallOffset = -(offset * 0.8) % 120;
@@ -1079,11 +1926,9 @@ class RetroGameController {
             this.ctx.stroke();
         }
 
-        // Sidewalk pavement base
         this.ctx.fillStyle = '#2d3748';
         this.ctx.fillRect(0, 350, 800, 130);
 
-        // Curb border line
         this.ctx.strokeStyle = '#4a5568';
         this.ctx.lineWidth = 4;
         this.ctx.beginPath();
@@ -1091,18 +1936,16 @@ class RetroGameController {
         this.ctx.lineTo(800, 350);
         this.ctx.stroke();
 
-        // Pavement crack separators (full foreground speed)
         this.ctx.strokeStyle = '#1a202c';
         this.ctx.lineWidth = 2.5;
         let groundOffset = -offset % 100;
         for (let gx = groundOffset; gx < 850; gx += 100) {
             this.ctx.beginPath();
             this.ctx.moveTo(gx, 350);
-            this.ctx.lineTo(gx - 40, 480); // perspective slant
+            this.ctx.lineTo(gx - 40, 480);
             this.ctx.stroke();
         }
 
-        // Foreground Streetlamp (cycles dynamically)
         let lampX = (450 - offset) % 600;
         if (lampX < -50) lampX += 600;
         this.ctx.save();
@@ -1114,13 +1957,93 @@ class RetroGameController {
         this.ctx.lineTo(lampX, 160);
         this.ctx.lineTo(lampX - 25, 160);
         this.ctx.stroke();
-        // Glowing bulb
+        
         this.ctx.fillStyle = '#ffe3a8';
         this.ctx.shadowColor = '#ffb703';
         this.ctx.shadowBlur = 20;
         this.ctx.beginPath();
         this.ctx.arc(lampX - 25, 175, 10, 0, Math.PI * 2);
         this.ctx.fill();
+        this.ctx.restore();
+    }
+
+    drawPlatforms() {
+        this.platforms.forEach(plat => {
+            const sx = plat.x - this.scrollOffset;
+            if (sx < -plat.w || sx > 800) return; // offscreen
+            
+            this.ctx.save();
+            const bgType = this.levelData[this.currentLevel - 1].background;
+            
+            this.ctx.strokeStyle = '#000';
+            this.ctx.lineWidth = 3.5;
+            
+            if (bgType === 'dojo') {
+                // Wooden platform
+                this.ctx.fillStyle = '#8b5a2b';
+                this.ctx.fillRect(sx, plat.y, plat.w, plat.h);
+                this.ctx.strokeRect(sx, plat.y, plat.w, plat.h);
+                this.ctx.strokeStyle = '#5c3d24';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(sx, plat.y + plat.h/2); this.ctx.lineTo(sx + plat.w, plat.y + plat.h/2);
+                this.ctx.stroke();
+            } else if (bgType === 'subway') {
+                // Steel girder
+                this.ctx.fillStyle = '#475569';
+                this.ctx.fillRect(sx, plat.y, plat.w, plat.h);
+                this.ctx.strokeRect(sx, plat.y, plat.w, plat.h);
+                this.ctx.strokeStyle = '#1e293b';
+                this.ctx.lineWidth = 1.5;
+                this.ctx.beginPath();
+                for (let px = sx; px < sx + plat.w; px += 20) {
+                    this.ctx.moveTo(px, plat.y);
+                    this.ctx.lineTo(px + 10, plat.y + plat.h);
+                    this.ctx.moveTo(px + 10, plat.y);
+                    this.ctx.lineTo(px, plat.y + plat.h);
+                }
+                this.ctx.stroke();
+            } else {
+                // Concrete scaffold
+                this.ctx.fillStyle = '#64748b';
+                this.ctx.fillRect(sx, plat.y, plat.w, plat.h);
+                this.ctx.strokeRect(sx, plat.y, plat.w, plat.h);
+                
+                // Caution stripes
+                this.ctx.fillStyle = '#fbbf24';
+                for (let px = sx; px < sx + plat.w; px += 30) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(px, plat.y);
+                    this.ctx.lineTo(px + 10, plat.y);
+                    this.ctx.lineTo(px + 20, plat.y + plat.h);
+                    this.ctx.lineTo(px + 10, plat.y + plat.h);
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                }
+            }
+            this.ctx.restore();
+        });
+    }
+
+    drawLevelClearScreen() {
+        this.ctx.save();
+        this.ctx.fillStyle = 'rgba(10, 12, 16, 0.9)';
+        this.ctx.fillRect(0, 0, 800, 480);
+
+        this.ctx.fillStyle = '#ffb703';
+        this.ctx.font = '800 48px "Outfit", sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(`${this.levelData[this.currentLevel - 1].name.toUpperCase()} CLEAR!`, 400, 190);
+
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '500 18px "Inter", sans-serif';
+        this.ctx.fillText(`CURRENT SCORE: ${this.player.score}`, 400, 240);
+        this.ctx.fillText("You are advancing deeper into the dark arts path...", 400, 280);
+
+        this.ctx.fillStyle = '#ff6a00';
+        this.ctx.font = '700 16px "Outfit", sans-serif';
+        this.ctx.fillText("PRESS J, Z OR TAP ACTION BUTTON TO START NEXT STAGE", 400, 345);
+
         this.ctx.restore();
     }
 
@@ -1231,17 +2154,24 @@ class RetroGameController {
             this.ctx.fillStyle = skinGrad;
             this.ctx.strokeStyle = '#000';
             this.ctx.lineWidth = 3.5;
-            this.ctx.beginPath();
-            this.ctx.arc(10, 24, 6, 0, Math.PI * 2); // Deltoid
-            this.ctx.fill(); this.ctx.stroke();
             
+            // Continuous muscle arm path (eliminates stacked circles)
             this.ctx.beginPath();
-            this.ctx.arc(6, 32, 5.5, 0, Math.PI * 2); // Bicep
-            this.ctx.fill(); this.ctx.stroke();
+            this.ctx.moveTo(13, 20); // Shoulder top
+            this.ctx.quadraticCurveTo(2, 22, 1, 30); // Deltoid/bicep curve
+            this.ctx.quadraticCurveTo(0, 38, 3, 41); // Forearm bulge
+            this.ctx.lineTo(8, 41);
+            this.ctx.quadraticCurveTo(11, 36, 10, 29); // Inner forearm
+            this.ctx.lineTo(13, 26);
+            this.ctx.closePath();
+            this.ctx.fill();
+            this.ctx.stroke();
 
+            // Fist Lobe
             this.ctx.beginPath();
-            this.ctx.arc(5, 42, 5, 0, Math.PI * 2); // Fist
-            this.ctx.fill(); this.ctx.stroke();
+            this.ctx.arc(5, 42, 4.5, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.stroke();
 
             // Vein on bicep
             this.ctx.strokeStyle = '#6b8e8f';
@@ -1261,7 +2191,7 @@ class RetroGameController {
         this.ctx.stroke();
 
         // Chest muscles shading (sculpted pecs / abs)
-        this.ctx.fillStyle = 'rgba(84, 28, 14, 0.25)';
+        this.ctx.fillStyle = 'rgba(84, 28, 14, 0.15)';
         this.ctx.beginPath();
         // Pec shadow (left side - bare skin)
         this.ctx.moveTo(22, 24);
@@ -1279,8 +2209,8 @@ class RetroGameController {
         // Pec border
         this.ctx.moveTo(11, 24); this.ctx.quadraticCurveTo(17, 28, 22, 28);
         // Abs definition lines
-        this.ctx.moveTo(13, 34); this.ctx.lineTo(31, 34);
-        this.ctx.moveTo(14, 40); this.ctx.lineTo(30, 40);
+        this.ctx.moveTo(13, 33); this.ctx.quadraticCurveTo(17, 34, 22, 33);
+        this.ctx.moveTo(14, 38); this.ctx.quadraticCurveTo(17, 39, 22, 38);
         this.ctx.stroke();
         
         // Battle scar on bare chest
@@ -1340,27 +2270,27 @@ class RetroGameController {
         if (p.state === 'attacking') {
             if (p.attackType === 'punch') {
                 // Punching bare arm (throws back bare arm forward as right cross!)
-                // Deltoid to fist extending to the right
+                // Deltoid to fist extending to the right in a continuous contour path
                 const armGrad = this.ctx.createLinearGradient(20, 24, 60, 24);
                 armGrad.addColorStop(0, skinHighlight);
                 armGrad.addColorStop(0.5, skinMid);
                 armGrad.addColorStop(1, skinShadow);
                 this.ctx.fillStyle = armGrad;
 
+                // Continuous punching arm path (no stacked balls)
                 this.ctx.beginPath();
-                this.ctx.arc(22, 24, 7.5, 0, Math.PI * 2); // Deltoid
-                this.ctx.fill(); this.ctx.stroke();
+                this.ctx.moveTo(22, 18); // Shoulder top
+                this.ctx.quadraticCurveTo(34, 16, 48, 19); // Top edge
+                this.ctx.lineTo(52, 21); // Wrist top
+                this.ctx.lineTo(52, 27); // Wrist bottom
+                this.ctx.quadraticCurveTo(36, 29, 22, 28); // Underarm/elbow
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.stroke();
 
+                // Fist
                 this.ctx.beginPath();
-                this.ctx.arc(34, 23, 6.5, 0, Math.PI * 2); // Bicep
-                this.ctx.fill(); this.ctx.stroke();
-
-                this.ctx.beginPath();
-                this.ctx.arc(45, 24, 6, 0, Math.PI * 2); // Forearm
-                this.ctx.fill(); this.ctx.stroke();
-                
-                this.ctx.beginPath();
-                this.ctx.arc(56, 24, 7.5, 0, Math.PI * 2); // Fist
+                this.ctx.arc(56, 24, 6.5, 0, Math.PI * 2);
                 this.ctx.fill(); this.ctx.stroke();
 
                 // Bulging green veins
@@ -1377,18 +2307,21 @@ class RetroGameController {
                 this.ctx.moveTo(27, 27); this.ctx.lineTo(40, 27);
                 this.ctx.stroke();
 
-                // Draw front sleeved arm pulled back to chest as guard
+                // Draw front sleeved arm pulled back to chest as guard (bent elbow)
                 this.ctx.fillStyle = saffronGrad;
                 this.ctx.strokeStyle = '#000';
                 this.ctx.beginPath();
-                this.ctx.arc(20, 28, 8, 0, Math.PI * 2); // shoulder sleeve
+                this.ctx.moveTo(22, 20); // Shoulder
+                this.ctx.lineTo(13, 26); // Upper arm
+                this.ctx.lineTo(17, 34); // Forearm
+                this.ctx.lineTo(21, 30); // Inner fold
+                this.ctx.closePath();
                 this.ctx.fill(); this.ctx.stroke();
-                this.ctx.beginPath();
-                this.ctx.arc(12, 34, 7, 0, Math.PI * 2); // elbow sleeve
-                this.ctx.fill(); this.ctx.stroke();
+                
+                // Fist
                 this.ctx.fillStyle = skinGrad;
                 this.ctx.beginPath();
-                this.ctx.arc(18, 36, 5, 0, Math.PI * 2); // fist
+                this.ctx.arc(17, 34, 4.5, 0, Math.PI * 2);
                 this.ctx.fill(); this.ctx.stroke();
             } else {
                 // Kick sweep pants leg (rich saffron terracotta)
@@ -1405,42 +2338,53 @@ class RetroGameController {
                 this.ctx.stroke();
             }
         } else {
-            // Idle front arm (sleeved in saffron terracotta)
+            // Idle front arm (sleeved in saffron terracotta) - smooth drape path
             this.ctx.fillStyle = saffronGrad;
+            
             this.ctx.beginPath();
-            this.ctx.arc(34, 24, 7.5, 0, Math.PI * 2); // Sleeve deltoid
+            this.ctx.moveTo(27, 20); // Neck/shoulder joint
+            this.ctx.quadraticCurveTo(39, 18, 41, 26); // Outer deltoid
+            this.ctx.quadraticCurveTo(43, 33, 40, 37); // Sleeve drape down
+            this.ctx.lineTo(32, 38);
+            this.ctx.quadraticCurveTo(28, 30, 27, 24); // Inner armpit
+            this.ctx.closePath();
             this.ctx.fill(); this.ctx.stroke();
-
+            
+            // Cuff ellipse
             this.ctx.beginPath();
-            this.ctx.arc(38, 33, 6.5, 0, Math.PI * 2); // Sleeve bicep
-            this.ctx.fill(); this.ctx.stroke();
+            this.ctx.ellipse(36, 37.5, 4, 1.5, 0, 0, Math.PI * 2);
+            this.ctx.stroke();
 
             // Hand (bare skin) sticking out
             this.ctx.fillStyle = skinGrad;
             this.ctx.beginPath();
-            this.ctx.arc(38, 42, 5.5, 0, Math.PI * 2); // Fist
+            this.ctx.arc(36, 42, 4.5, 0, Math.PI * 2); // Fist
             this.ctx.fill(); this.ctx.stroke();
         }
 
-        // 5. Head & Face (Bald sphere with radial lighting, angry features, scar under right eye)
+        // 5. Head & Face (Tapered oval shape, realistic features, scar under right eye)
         const headGrad = this.ctx.createRadialGradient(20, 6, 2, 22, 10, 10);
         headGrad.addColorStop(0, skinHighlight);
         headGrad.addColorStop(0.5, skinMid);
         headGrad.addColorStop(1, skinShadow);
+        
+        // Shaded ears (smaller realistic lobes)
         this.ctx.fillStyle = headGrad;
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 3.5;
+        this.ctx.beginPath();
+        this.ctx.ellipse(14.5, 9.5, 1.5, 2.5, Math.PI / 10, 0, Math.PI * 2);
+        this.ctx.ellipse(29.5, 9.5, 1.5, 2.5, -Math.PI / 10, 0, Math.PI * 2);
+        this.ctx.fill(); this.ctx.stroke();
         
-        // Bald head
+        // Tapered oval head shape
         this.ctx.beginPath();
-        this.ctx.arc(22, 10, 8.5, 0, Math.PI * 2);
-        this.ctx.fill();
-        this.ctx.stroke();
-
-        // Shaded ears
-        this.ctx.beginPath();
-        this.ctx.arc(13.5, 10, 2.5, 0, Math.PI * 2);
-        this.ctx.arc(30.5, 10, 2.5, 0, Math.PI * 2);
+        this.ctx.moveTo(16, 7);
+        this.ctx.quadraticCurveTo(22, 1, 28, 7); // Skull cap
+        this.ctx.quadraticCurveTo(29, 14, 25, 17); // Right jaw
+        this.ctx.lineTo(19, 17); // Chin
+        this.ctx.quadraticCurveTo(15, 14, 16, 7); // Left jaw
+        this.ctx.closePath();
         this.ctx.fill();
         this.ctx.stroke();
 
@@ -1508,23 +2452,20 @@ class RetroGameController {
             this.ctx.moveTo(26, 12); this.ctx.lineTo(27, 15);
             this.ctx.stroke();
 
-            // Open gritting teeth mouth
-            this.ctx.fillStyle = '#fff';
+            // Open gritting teeth mouth (smooth shape, not barcode)
+            this.ctx.fillStyle = '#4a121a'; // dark red mouth interior
             this.ctx.strokeStyle = '#000';
             this.ctx.lineWidth = 1.8;
             this.ctx.beginPath();
-            this.ctx.roundRect(17, 13.5, 10, 5, [1]);
+            this.ctx.roundRect(17, 13.5, 10, 3.5, [1]);
             this.ctx.fill();
             this.ctx.stroke();
 
-            // Teeth grid
-            this.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-            this.ctx.lineWidth = 0.8;
+            // Teeth line
+            this.ctx.strokeStyle = '#ffffff';
+            this.ctx.lineWidth = 1;
             this.ctx.beginPath();
-            this.ctx.moveTo(17, 16); this.ctx.lineTo(27, 16);
-            this.ctx.moveTo(20, 13.5); this.ctx.lineTo(20, 18.5);
-            this.ctx.moveTo(22, 13.5); this.ctx.lineTo(22, 18.5);
-            this.ctx.moveTo(24, 13.5); this.ctx.lineTo(24, 18.5);
+            this.ctx.moveTo(17.5, 15.2); this.ctx.lineTo(26.5, 15.2);
             this.ctx.stroke();
         }
 
@@ -1925,9 +2866,16 @@ class RetroGameController {
         this.ctx.fillRect(25, 45, 180 * this.gameProgress, 8);
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '500 10px "Outfit", sans-serif';
-        this.ctx.fillText("STAGE 1 PROGRESS", 25, 65);
+        this.ctx.fillText(`${this.levelData[this.currentLevel - 1].name.toUpperCase()} PROGRESS`, 25, 65);
+
+        // Knives inventory counter
+        this.ctx.fillStyle = '#ffb703';
+        this.ctx.font = '800 15px "Outfit", sans-serif';
+        this.ctx.fillText(`🗡️ x ${this.player.knives}`, 25, 85);
 
         // Player Health Bar
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '500 10px "Outfit", sans-serif';
         this.ctx.fillText("VIGILANTE HEALTH", 610, 25);
         this.ctx.fillStyle = 'rgba(230, 57, 70, 0.2)';
         this.ctx.fillRect(610, 32, 160, 14);
@@ -1941,13 +2889,15 @@ class RetroGameController {
         if (this.boss) {
             this.ctx.fillStyle = '#ffffff';
             this.ctx.font = '800 16px "Outfit", sans-serif';
-            this.ctx.fillText("BOSS: BILLY THE SLICER", 300, 30);
+            this.ctx.fillText(`BOSS: ${this.boss.name.toUpperCase()}`, 300, 30);
             
             this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
             this.ctx.fillRect(300, 38, 200, 12);
             
             this.ctx.fillStyle = '#ff6a00'; // orange
             this.ctx.fillRect(300, 38, 200 * (this.boss.health / this.boss.maxHealth), 12);
+            this.ctx.strokeStyle = '#ffffff';
+            this.ctx.lineWidth = 1.5;
             this.ctx.strokeRect(300, 38, 200, 12);
         }
 
@@ -1969,7 +2919,7 @@ class RetroGameController {
         this.ctx.fillText(`SCORE: ${this.player.score}`, 400, 260);
         this.ctx.fillStyle = '#ff6a00';
         this.ctx.font = '700 16px "Outfit", sans-serif';
-        this.ctx.fillText("PRESS ANY KEY OR TAP CONTROLLER TO RESTART STAGE 1", 400, 310);
+        this.ctx.fillText(`PRESS ANY KEY OR TAP CONTROLLER TO RESTART STAGE ${this.currentLevel}`, 400, 310);
 
         this.ctx.restore();
     }
@@ -1982,16 +2932,16 @@ class RetroGameController {
         this.ctx.fillStyle = '#ffb703';
         this.ctx.font = '800 52px "Outfit", sans-serif';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText("STAGE 1 COMPLETE!", 400, 190);
+        this.ctx.fillText("ALL STAGES COMPLETE!", 400, 190);
 
         this.ctx.fillStyle = '#ffffff';
         this.ctx.font = '500 18px "Inter", sans-serif';
-        this.ctx.fillText("You unleashed the Forbidden Shaolin Arts and sliced NYC clean!", 400, 240);
+        this.ctx.fillText("You conquered all 4 stages of the Forbidden Shaolin Arts and sliced NYC clean!", 400, 240);
         this.ctx.fillText(`FINAL SCORE: ${this.player.score}`, 400, 280);
 
         this.ctx.fillStyle = '#00b4d8';
         this.ctx.font = '700 16px "Outfit", sans-serif';
-        this.ctx.fillText("PRESS ANY KEY OR TAP TO PLAY STAGE 1 AGAIN", 400, 330);
+        this.ctx.fillText("PRESS ANY KEY OR TAP TO PLAY AGAIN FROM STAGE 1", 400, 330);
 
         this.ctx.restore();
     }
