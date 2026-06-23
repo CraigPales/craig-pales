@@ -94,27 +94,48 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
         }
         
         const transparentCanvas = floodFillChromaKey(img, keyColorVal, tolVal);
-        const isMultiFrame = src.includes('craig_walk') || src.includes('thug_afro') || src.includes('thug_leather');
+        const isMultiFrame = src.includes('craig_walk') || src.includes('thug_afro') || src.includes('thug_leather') || src.includes('craig_crouch');
         
         if (isMultiFrame) {
             const w = transparentCanvas.width;
             const h = transparentCanvas.height;
             
-            // Use centered windows of width 260 at centers 171, 512, and 853
-            // to crop the frames cleanly without including overlapping hands/legs of adjacent poses.
-            const centers = [171, 512, 853];
-            const cropW = 260;
-            const halfCrop = 130;
+            // Define custom valley separation points for each spritesheet to avoid split limb/ghost artifacts
+            let valleys = [250, 776]; // default
+            if (src.includes('thug_leather')) {
+                valleys = [250, 729];
+            } else if (src.includes('craig_walk2')) {
+                valleys = [250, 774];
+            } else if (src.includes('craig_walk')) {
+                valleys = [250, 779];
+            } else if (src.includes('thug_afro')) {
+                valleys = [253, 776];
+            } else if (src.includes('craig_crouch')) {
+                valleys = [220, 730];
+            }
             
             const frames = [];
             for (let i = 0; i < 3; i++) {
+                let startX = 0;
+                let endX = w;
+                if (i === 0) {
+                    startX = 0;
+                    endX = valleys[0];
+                } else if (i === 1) {
+                    startX = valleys[0];
+                    endX = valleys[1];
+                } else {
+                    startX = valleys[1];
+                    endX = w;
+                }
+                const colW = endX - startX;
+                
                 const colCanvas = document.createElement('canvas');
-                colCanvas.width = cropW;
+                colCanvas.width = colW;
                 colCanvas.height = h;
                 const colCtx = colCanvas.getContext('2d');
                 
-                const sx = Math.max(0, centers[i] - halfCrop);
-                colCtx.drawImage(transparentCanvas, sx, 0, cropW, h, 0, 0, cropW, h);
+                colCtx.drawImage(transparentCanvas, startX, 0, colW, h, 0, 0, colW, h);
                 
                 const trimmedCol = trimCanvasSimple(colCanvas);
                 frames.push(trimmedCol);
@@ -167,6 +188,10 @@ class RetroAudio {
     constructor() {
         this.ctx = null;
         this.distCurve = null;
+        this.bgmPlaying = false;
+        this.bgmTimeout = null;
+        this.bgmStep = 0;
+        this.nextNoteTime = 0;
     }
 
     init() {
@@ -183,6 +208,190 @@ class RetroAudio {
         } catch (e) {
             console.warn("Audio Context init blocked or failed:", e);
         }
+    }
+
+    startBGM() {
+        this.init();
+        if (!this.ctx) return;
+        if (this.bgmPlaying) return;
+        this.bgmPlaying = true;
+        this.bgmStep = 0;
+        this.nextNoteTime = this.ctx.currentTime;
+        
+        const scheduleAheadTime = 0.2; // seconds
+        const lookahead = 25.0; // milliseconds
+        
+        const scheduler = () => {
+            if (!this.bgmPlaying) return;
+            while (this.nextNoteTime < this.ctx.currentTime + scheduleAheadTime) {
+                this.scheduleStep(this.bgmStep, this.nextNoteTime);
+                this.advanceStep();
+            }
+            this.bgmTimeout = setTimeout(scheduler, lookahead);
+        };
+        scheduler();
+    }
+
+    stopBGM() {
+        if (!this.bgmPlaying) return;
+        this.bgmPlaying = false;
+        if (this.bgmTimeout) {
+            clearTimeout(this.bgmTimeout);
+            this.bgmTimeout = null;
+        }
+    }
+
+    advanceStep() {
+        const secondsPerBeat = 60.0 / 135.0; // 135 BPM
+        const secondsPerStep = secondsPerBeat / 4.0; // 16th note
+        this.nextNoteTime += secondsPerStep;
+        this.bgmStep = (this.bgmStep + 1) % 32;
+    }
+
+    scheduleStep(step, time) {
+        const bassPattern = [
+            110.0, 220.0, 110.0, 220.0, 110.0, 220.0, 110.0, 220.0, // A2, A3
+            82.4, 164.8, 82.4, 164.8, 82.4, 164.8, 82.4, 164.8,   // E2, E3
+            87.3, 174.6, 87.3, 174.6, 87.3, 174.6, 87.3, 174.6,   // F2, F3
+            98.0, 196.0, 98.0, 196.0, 98.0, 196.0, 98.0, 196.0    // G2, G3
+        ];
+        
+        const melodyPattern = [
+            440, 0, 523, 659, 698, 0, 659, 0, 523, 0, 494, 0, 440, 0, 494, 0,
+            440, 0, 523, 659, 698, 0, 880, 0, 698, 0, 659, 0, 523, 0, 494, 523
+        ];
+        
+        // 1. Bassline
+        const bassFreq = bassPattern[step % 32];
+        if (bassFreq > 0) {
+            this.playSeqBass(bassFreq, time);
+        }
+        
+        // 2. Melody (Hirajoshi pentatonic with driving rhythm)
+        const melFreq = melodyPattern[step % 32];
+        if (melFreq > 0) {
+            this.playSeqMelody(melFreq, time);
+        }
+        
+        // 3. 2-Bit Drums
+        const modStep = step % 8;
+        if (modStep === 0 || modStep === 4) {
+            this.playSeqKick(time);
+        }
+        if (modStep === 4) {
+            this.playSeqSnare(time);
+        }
+        if (modStep === 2 || modStep === 6) {
+            this.playSeqHat(time);
+        }
+    }
+
+    playSeqKick(time) {
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(120, time);
+            osc.frequency.exponentialRampToValueAtTime(35, time + 0.08);
+            gain.gain.setValueAtTime(0.18, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(time);
+            osc.stop(time + 0.08);
+        } catch(e) {}
+    }
+
+    playSeqSnare(time) {
+        try {
+            const bufferSize = this.ctx.sampleRate * 0.08;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(1000, time);
+
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.06, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            noise.start(time);
+            noise.stop(time + 0.08);
+        } catch(e) {}
+    }
+
+    playSeqHat(time) {
+        try {
+            const bufferSize = this.ctx.sampleRate * 0.03;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.setValueAtTime(8000, time);
+
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.015, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.03);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            noise.start(time);
+            noise.stop(time + 0.03);
+        } catch(e) {}
+    }
+
+    playSeqMelody(freq, time) {
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, time);
+            
+            gain.gain.setValueAtTime(0.03, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+            
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(time);
+            osc.stop(time + 0.15);
+        } catch(e) {}
+    }
+
+    playSeqBass(freq, time) {
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, time);
+            
+            gain.gain.setValueAtTime(0.065, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+            
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(time);
+            osc.stop(time + 0.1);
+        } catch(e) {}
     }
 
     playJump() {
@@ -1032,9 +1241,13 @@ class KnifeProjectile {
     draw(ctx, scrollOffset) {
         ctx.save();
         ctx.translate(this.x - scrollOffset, this.y);
+        
+        let angle = Math.atan2(this.vy, Math.abs(this.vx));
         if (this.vx < 0) {
             ctx.scale(-1, 1);
         }
+        ctx.rotate(angle);
+        
         ctx.fillStyle = '#e2e8f0'; // bright silver steel
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 1.5;
@@ -1121,6 +1334,56 @@ class PowerWaveProjectile {
             ctx.lineWidth = 6;
             ctx.strokeStyle = '#ffffff';
             ctx.stroke();
+        }
+        ctx.restore();
+    }
+}
+
+class DownwardEnergyWave {
+    constructor(x, y, vx, vy, isPlayerOwned = true, type = 'punch') {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.isPlayerOwned = isPlayerOwned;
+        this.type = type;
+        this.width = 24;
+        this.height = 24;
+        this.age = 0;
+        this.maxAge = 50; // stays on screen for ~0.8s
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.age++;
+    }
+
+    draw(ctx, scrollOffset) {
+        ctx.save();
+        ctx.translate(this.x - scrollOffset, this.y);
+        
+        let angle = Math.atan2(this.vy, Math.abs(this.vx));
+        if (this.vx < 0) {
+            ctx.scale(-1, 1);
+        }
+        ctx.rotate(angle);
+        
+        ctx.shadowBlur = 10;
+        if (this.type === 'punch') {
+            ctx.shadowColor = '#d946ef';
+            ctx.fillStyle = 'rgba(168, 85, 247, 0.9)';
+            ctx.beginPath();
+            ctx.arc(0, 0, 14, -Math.PI / 2, Math.PI / 2);
+            ctx.quadraticCurveTo(5, 0, 0, -Math.PI / 2);
+            ctx.closePath();
+            ctx.fill();
+        } else {
+            ctx.shadowColor = '#fbbf24';
+            ctx.fillStyle = 'rgba(249, 115, 22, 0.9)';
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI * 2);
+            ctx.fill();
         }
         ctx.restore();
     }
@@ -1657,14 +1920,15 @@ class RetroGameController {
         
         // Spawn the massive shockwave projectile
         const pVx = this.player.facing * 8.5;
+        const pVy = this.player.isDucking ? 4.5 : 0;
         const px = this.player.x + (this.player.facing === 1 ? 55 : -25) + this.scrollOffset;
-        const py = this.player.y;
+        const py = this.player.isDucking ? (this.player.y + 15) : this.player.y;
         
         this.projectiles.push(new PowerWaveProjectile(
             px,
             py,
             pVx,
-            0,
+            pVy,
             true, // isPlayerOwned = true
             type
         ));
@@ -1726,6 +1990,13 @@ class RetroGameController {
             this.releaseCharge('kick');
         });
 
+        if (this.canvas) {
+            this.canvas._canvasInitAudio = () => {
+                gameAudio.init();
+            };
+            this.canvas.addEventListener('pointerdown', this.canvas._canvasInitAudio);
+        }
+
         // Fullscreen Toggle Click Binding
         const fsToggleBtn = document.getElementById('btn-fullscreen-toggle');
         if (fsToggleBtn) {
@@ -1771,6 +2042,10 @@ class RetroGameController {
         unbindBtn(['btn-punch', 'mobile-btn-punch']);
         unbindBtn(['btn-kick', 'mobile-btn-kick']);
 
+        if (this.canvas && this.canvas._canvasInitAudio) {
+            this.canvas.removeEventListener('pointerdown', this.canvas._canvasInitAudio);
+        }
+
         // Unbind Fullscreen Toggle
         const fsToggleBtn = document.getElementById('btn-fullscreen-toggle');
         if (fsToggleBtn && fsToggleBtn._fsHandler) {
@@ -1801,6 +2076,42 @@ class RetroGameController {
         this.player.state = 'attacking';
         this.player.attackType = type;
         this.player.stateTimer = 10; // attack lasts 10 frames
+        
+        if (this.player.isDucking) {
+            if (type === 'punch' && this.player.knives > 0) {
+                this.player.knives--;
+                gameAudio.playSlice(); // throw knife sound
+                const kVx = this.player.facing * 8.5;
+                const kVy = 4.5; // travel downwards
+                this.projectiles.push(new KnifeProjectile(
+                    this.player.x + (this.player.facing === 1 ? 40 : 5) + this.scrollOffset,
+                    this.player.y + 20, // lower spawn point since crouching
+                    kVx,
+                    kVy,
+                    true // isPlayerOwned = true
+                ));
+                return;
+            } else {
+                // Crouching attack throws a downward-slanted energy wave
+                gameAudio.playPunch(); // or kick
+                const kVx = this.player.facing * 7.5;
+                const kVy = 4.0; // travel downwards
+                this.projectiles.push(new DownwardEnergyWave(
+                    this.player.x + (this.player.facing === 1 ? 40 : -10) + this.scrollOffset,
+                    this.player.y + 20,
+                    kVx,
+                    kVy,
+                    true, // isPlayerOwned = true
+                    type
+                ));
+                
+                // Spawn a visual slash effect slanted downward
+                const hitX = this.player.x + (this.player.facing === 1 ? 50 : -10);
+                const hitY = this.player.y + 25;
+                this.slashes.push(new SliceSlashEffect(hitX, hitY, type === 'kick'));
+                return;
+            }
+        }
         
         if (type === 'punch' && this.player.knives > 0) {
             this.player.knives--;
@@ -1972,11 +2283,62 @@ class RetroGameController {
         }
     }
 
+    areSpritesLoaded() {
+        for (const key in this.sprites) {
+            if (this.sprites[key] && !this.sprites[key].loaded) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     animate(now) {
         if (this.destroyed) return;
         
         const dt = now - this.lastTime;
         this.lastTime = now;
+
+        if (!this.areSpritesLoaded()) {
+            // Draw a beautiful loading progress card in the center
+            this.ctx.fillStyle = '#0a0e17';
+            this.ctx.fillRect(0, 0, 800, 480);
+            
+            // Draw loading title
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.font = '800 24px "Outfit", sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText("LOADING RETRO VIGILANTE...", 400, 210);
+            
+            // Draw track
+            this.ctx.fillStyle = 'rgba(168, 85, 247, 0.15)';
+            this.ctx.beginPath();
+            this.ctx.roundRect(300, 240, 200, 10, [5]);
+            this.ctx.fill();
+            
+            let loadedCount = 0;
+            let totalCount = 0;
+            for (const key in this.sprites) {
+                totalCount++;
+                if (this.sprites[key] && this.sprites[key].loaded) {
+                    loadedCount++;
+                }
+            }
+            const progress = totalCount > 0 ? (loadedCount / totalCount) : 0;
+            
+            // Draw fill
+            this.ctx.fillStyle = '#d946ef';
+            this.ctx.beginPath();
+            this.ctx.roundRect(300, 240, 200 * progress, 10, [5]);
+            this.ctx.fill();
+            
+            // Draw loading status text
+            this.ctx.fillStyle = '#a855f7';
+            this.ctx.font = '700 12px "Outfit", sans-serif';
+            this.ctx.fillText(`LOADING ASSETS: ${loadedCount} / ${totalCount}`, 400, 275);
+            
+            requestAnimationFrame(this.animate);
+            return;
+        }
 
         this.update();
         this.draw();
@@ -2003,6 +2365,13 @@ class RetroGameController {
             if (this.chargeTimer % 6 === 0) {
                 gameAudio.playCharge(progress);
             }
+        }
+
+        // Play / Stop Stage 1 chiptune background music
+        if (this.gameState === 'playing' && this.currentLevel === 1) {
+            gameAudio.startBGM();
+        } else {
+            gameAudio.stopBGM();
         }
 
         // Slowly recharge Ki power bar
@@ -2481,6 +2850,11 @@ class RetroGameController {
                     }
                     destroyed = true;
                 }
+            }
+
+            // Check age limit
+            if (!destroyed && proj.maxAge && proj.age > proj.maxAge) {
+                destroyed = true;
             }
 
             // Impact ground or out of bounds
