@@ -1578,29 +1578,31 @@ class RetroGameController {
     }
 
     bindVirtualButtons() {
-        const bindBtn = (id, actionDown, actionUp) => {
-            const btn = document.getElementById(id);
-            if (btn) {
-                btn._handlerDown = (evt) => {
-                    evt.preventDefault();
-                    gameAudio.init();
-                    actionDown();
-                };
-                btn._handlerUp = (evt) => {
-                    evt.preventDefault();
-                    if (actionUp) actionUp();
-                };
-                btn.addEventListener('pointerdown', btn._handlerDown);
-                btn.addEventListener('pointerup', btn._handlerUp);
-                btn.addEventListener('pointercancel', btn._handlerUp);
-            }
+        const bindBtn = (ids, actionDown, actionUp) => {
+            ids.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    btn._handlerDown = (evt) => {
+                        evt.preventDefault();
+                        gameAudio.init();
+                        actionDown();
+                    };
+                    btn._handlerUp = (evt) => {
+                        evt.preventDefault();
+                        if (actionUp) actionUp();
+                    };
+                    btn.addEventListener('pointerdown', btn._handlerDown);
+                    btn.addEventListener('pointerup', btn._handlerUp);
+                    btn.addEventListener('pointercancel', btn._handlerUp);
+                }
+            });
         };
 
-        bindBtn('btn-left', () => { this.keys['KeyA'] = true; this.keys['ArrowLeft'] = true; }, () => { this.keys['KeyA'] = false; this.keys['ArrowLeft'] = false; });
-        bindBtn('btn-duck', () => { this.keys['KeyS'] = true; this.keys['ArrowDown'] = true; }, () => { this.keys['KeyS'] = false; this.keys['ArrowDown'] = false; });
-        bindBtn('btn-right', () => { this.keys['KeyD'] = true; this.keys['ArrowRight'] = true; }, () => { this.keys['KeyD'] = false; this.keys['ArrowRight'] = false; });
-        bindBtn('btn-jump', () => { this.triggerJump(); }, () => {});
-        bindBtn('btn-punch', () => {
+        bindBtn(['btn-left', 'mobile-btn-left'], () => { this.keys['KeyA'] = true; this.keys['ArrowLeft'] = true; }, () => { this.keys['KeyA'] = false; this.keys['ArrowLeft'] = false; });
+        bindBtn(['btn-duck', 'mobile-btn-duck'], () => { this.keys['KeyS'] = true; this.keys['ArrowDown'] = true; }, () => { this.keys['KeyS'] = false; this.keys['ArrowDown'] = false; });
+        bindBtn(['btn-right', 'mobile-btn-right'], () => { this.keys['KeyD'] = true; this.keys['ArrowRight'] = true; }, () => { this.keys['KeyD'] = false; this.keys['ArrowRight'] = false; });
+        bindBtn(['btn-jump', 'mobile-btn-jump'], () => { this.triggerJump(); }, () => {});
+        bindBtn(['btn-punch', 'mobile-btn-punch'], () => {
             if (this.gameState === 'gameover' || this.gameState === 'victory') {
                 this.resetGame();
             } else if (this.gameState === 'levelclear') {
@@ -1609,7 +1611,7 @@ class RetroGameController {
                 this.triggerAttack('punch');
             }
         });
-        bindBtn('btn-kick', () => {
+        bindBtn(['btn-kick', 'mobile-btn-kick'], () => {
             if (this.gameState === 'gameover' || this.gameState === 'victory') {
                 this.resetGame();
             } else if (this.gameState === 'levelclear') {
@@ -1618,23 +1620,57 @@ class RetroGameController {
                 this.triggerAttack('kick');
             }
         });
+
+        // Fullscreen Toggle Click Binding
+        const fsToggleBtn = document.getElementById('btn-fullscreen-toggle');
+        if (fsToggleBtn) {
+            fsToggleBtn._fsHandler = (evt) => {
+                evt.preventDefault();
+                gameAudio.init();
+                const wrapper = document.querySelector('.game-viewport-wrapper');
+                if (wrapper) {
+                    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                        if (wrapper.requestFullscreen) {
+                            wrapper.requestFullscreen();
+                        } else if (wrapper.webkitRequestFullscreen) {
+                            wrapper.webkitRequestFullscreen();
+                        }
+                    } else {
+                        if (document.exitFullscreen) {
+                            document.exitFullscreen();
+                        } else if (document.webkitExitFullscreen) {
+                            document.webkitExitFullscreen();
+                        }
+                    }
+                }
+            };
+            fsToggleBtn.addEventListener('click', fsToggleBtn._fsHandler);
+        }
     }
 
     unbindVirtualButtons() {
-        const unbindBtn = (id) => {
-            const btn = document.getElementById(id);
-            if (btn && btn._handlerDown) {
-                btn.removeEventListener('pointerdown', btn._handlerDown);
-                btn.removeEventListener('pointerup', btn._handlerUp);
-                btn.removeEventListener('pointercancel', btn._handlerUp);
-            }
+        const unbindBtn = (ids) => {
+            ids.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn && btn._handlerDown) {
+                    btn.removeEventListener('pointerdown', btn._handlerDown);
+                    btn.removeEventListener('pointerup', btn._handlerUp);
+                    btn.removeEventListener('pointercancel', btn._handlerUp);
+                }
+            });
         };
-        unbindBtn('btn-left');
-        unbindBtn('btn-duck');
-        unbindBtn('btn-right');
-        unbindBtn('btn-jump');
-        unbindBtn('btn-punch');
-        unbindBtn('btn-kick');
+        unbindBtn(['btn-left', 'mobile-btn-left']);
+        unbindBtn(['btn-duck', 'mobile-btn-duck']);
+        unbindBtn(['btn-right', 'mobile-btn-right']);
+        unbindBtn(['btn-jump', 'mobile-btn-jump']);
+        unbindBtn(['btn-punch', 'mobile-btn-punch']);
+        unbindBtn(['btn-kick', 'mobile-btn-kick']);
+
+        // Unbind Fullscreen Toggle
+        const fsToggleBtn = document.getElementById('btn-fullscreen-toggle');
+        if (fsToggleBtn && fsToggleBtn._fsHandler) {
+            fsToggleBtn.removeEventListener('click', fsToggleBtn._fsHandler);
+        }
     }
 
     resetGame() {
