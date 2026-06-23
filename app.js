@@ -169,6 +169,13 @@ function wrapSvgText(text, maxCharsPerLine = 35) {
     }).join('');
 }
 
+function getSpriteSrc(path) {
+    if (window.spriteCache && window.spriteCache[path] && window.spriteCache[path].loaded && window.spriteCache[path].dataUrl) {
+        return window.spriteCache[path].dataUrl;
+    }
+    return path;
+}
+
 // SVG Assets Generator
 function generateCraigSVG(config, width = "100%", height = "100%") {
     const { outfit, expression, aura, pose, bg, dialogue, specialEffect } = config;
@@ -196,12 +203,12 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
     
     // Training slide: show Sensei next to young Craig
     if (specialEffect === 'training') {
-        extraSvg += `<image href="assets/boss_sensei.png" x="50" y="140" width="160" height="160" />`;
+        extraSvg += `<image href="${getSpriteSrc('assets/boss_sensei.png')}" x="50" y="180" width="160" height="160" preserveAspectRatio="xMidYMax meet" />`;
     }
     
     // Ambush slide: show leather jacket thug next to Craig
     if (specialEffect === 'ambush') {
-        extraSvg += `<image href="assets/thug_leather.png" x="40" y="130" width="160" height="160" />`;
+        extraSvg += `<image href="${getSpriteSrc('assets/thug_leather.png')}" x="40" y="180" width="160" height="160" preserveAspectRatio="xMidYMax meet" />`;
     }
     
     // Blood slide: show blood overlay & split thug
@@ -213,7 +220,7 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
             <circle cx="40" cy="150" r="6" fill="#800000" opacity="0.8"/>
             <!-- Dismembered thug in background -->
             <g opacity="0.85">
-                <image href="assets/thug_afro.png" x="220" y="140" width="150" height="150" transform="rotate(35 295 215)"/>
+                <image href="${getSpriteSrc('assets/thug_afro.png')}" x="220" y="190" width="150" height="150" preserveAspectRatio="xMidYMax meet" transform="rotate(35 295 215)"/>
             </g>
         `;
     }
@@ -236,7 +243,7 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
     // Young Craig is scaled down
     if (outfit === 'young-robe') {
         craigX = 180;
-        craigY = 170;
+        craigY = 180;
         craigW = 160;
         craigH = 160;
     }
@@ -262,7 +269,7 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
             ${extraSvg}
 
             <!-- Craig Character -->
-            <image href="${craigPath}" x="${craigX}" y="${craigY}" width="${craigW}" height="${craigH}"/>
+            <image href="${getSpriteSrc(craigPath)}" x="${craigX}" y="${craigY}" width="${craigW}" height="${craigH}" preserveAspectRatio="xMidYMax meet"/>
 
             <!-- Speech Bubble overlay if dialogue exists -->
             ${dialogue ? `
@@ -281,6 +288,7 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
 
 // Dashboard Cartoon Slideshow
 function updateDashboardPreview() {
+    window.updateDashboardPreview = updateDashboardPreview;
     const previewContainer = document.getElementById('dashboard-cartoon-preview');
     if (!previewContainer) return;
 

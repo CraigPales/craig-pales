@@ -2,42 +2,168 @@
 
 // --- Sprite Cache & Chroma Key Engine ---
 const spriteCache = {};
+window.spriteCache = spriteCache;
 
-function makeImageTransparent(img, keyColor = {r: 0, g: 0, b: 0}, tolerance = 30) {
+function floodFillChromaKey(img, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = img.naturalWidth || img.width;
-    tempCanvas.height = img.naturalHeight || img.height;
+    const width = img.naturalWidth || img.width;
+    const height = img.naturalHeight || img.height;
+    tempCanvas.width = width;
+    tempCanvas.height = height;
     const tempCtx = tempCanvas.getContext('2d');
     tempCtx.drawImage(img, 0, 0);
     
-    if (tempCanvas.width === 0 || tempCanvas.height === 0) return tempCanvas;
+    if (width === 0 || height === 0) return tempCanvas;
     
     try {
-        const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+        const imgData = tempCtx.getImageData(0, 0, width, height);
         const data = imgData.data;
-        for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i+1];
-            const b = data[i+2];
+        
+        // BFS queue and visited array to clean background black
+        const visited = new Uint8Array(width * height);
+        const queue = [];
+        
+        // Seed from all edges to clean the background black padding
+        for (let x = 0; x < width; x++) {
+            let idx = x;
+            visited[idx] = 1;
+            queue.push(idx);
             
-            const dist = Math.sqrt(
-                Math.pow(r - keyColor.r, 2) +
-                Math.pow(g - keyColor.g, 2) +
-                Math.pow(b - keyColor.b, 2)
-            );
+            idx = (height - 1) * width + x;
+            visited[idx] = 1;
+            queue.push(idx);
+        }
+        for (let y = 1; y < height - 1; y++) {
+            let idx = y * width;
+            visited[idx] = 1;
+            queue.push(idx);
             
-            if (dist < tolerance) {
-                data[i+3] = 0; // transparent
+            idx = y * width + (width - 1);
+            visited[idx] = 1;
+            queue.push(idx);
+        }
+        
+        const tolSq = tolerance * tolerance;
+        
+        let qHead = 0;
+        while (qHead < queue.length) {
+            const currIdx = queue[qHead++];
+            const currX = currIdx % width;
+            const currY = Math.floor(currIdx / width);
+            
+            const r = data[currIdx * 4];
+            const g = data[currIdx * 4 + 1];
+            const b = data[currIdx * 4 + 2];
+            const a = data[currIdx * 4 + 3];
+            
+            const distSq = (r - keyColor.r) * (r - keyColor.r) +
+                           (g - keyColor.g) * (g - keyColor.g) +
+                           (b - keyColor.b) * (b - keyColor.b);
+            
+            if (a === 0 || distSq < tolSq) {
+                data[currIdx * 4 + 3] = 0; // Transparent
+                
+                const n1 = currIdx + 1;
+                if (currX < width - 1 && !visited[n1]) { visited[n1] = 1; queue.push(n1); }
+                
+                const n2 = currIdx - 1;
+                if (currX > 0 && !visited[n2]) { visited[n2] = 1; queue.push(n2); }
+                
+                const n3 = currIdx + width;
+                if (currY < height - 1 && !visited[n3]) { visited[n3] = 1; queue.push(n3); }
+                
+                const n4 = currIdx - width;
+                if (currY > 0 && !visited[n4]) { visited[n4] = 1; queue.push(n4); }
             }
         }
+        
         tempCtx.putImageData(imgData, 0, 0);
     } catch (e) {
-        // Silent catch for CORS blocks locally
+        console.warn("Flood fill chroma key failed (CORS/context):", e);
     }
     return tempCanvas;
 }
 
-function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 30) {
+function trimImage(canvas) {
+    if (canvas.width === 0 || canvas.height === 0) return canvas;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    try {
+        const imgData = ctx.getImageData(0, 0, width, height);
+        const data = imgData.data;
+        
+        let minX = width;
+        let minY = height;
+        let maxX = 0;
+        let maxY = 0;
+        let found = false;
+        
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const alpha = data[(y * width + x) * 4 + 3];
+                if (alpha > 0) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                    found = true;
+                }
+            }
+        }
+        
+        if (!found) return canvas;
+        
+        const trimWidth = maxX - minX + 1;
+        const trimHeight = maxY - minY + 1;
+        
+        const trimmedCanvas = document.createElement('canvas');
+        trimmedCanvas.width = trimWidth;
+        trimmedCanvas.height = trimHeight;
+        const trimmedCtx = trimmedCanvas.getContext('2d');
+        
+        trimmedCtx.drawImage(canvas, minX, minY, trimWidth, trimHeight, 0, 0, trimWidth, trimHeight);
+        return trimmedCanvas;
+    } catch (e) {
+        console.warn("Trim image failed:", e);
+        return canvas;
+    }
+}
+
+function generateWalkFrames(canvas) {
+    if (!canvas || canvas.width === 0 || canvas.height === 0) return [canvas, canvas, canvas];
+    const w = canvas.width;
+    const h = canvas.height;
+    
+    const f1 = canvas;
+    
+    const f2 = document.createElement('canvas');
+    f2.width = Math.ceil(w * 1.05);
+    f2.height = h;
+    const ctx2 = f2.getContext('2d');
+    ctx2.save();
+    ctx2.translate(f2.width / 2, h);
+    ctx2.scale(1.04, 0.95);
+    ctx2.transform(1, 0, -0.06, 1, 0, 0); // Tilt forward slightly
+    ctx2.drawImage(canvas, -w / 2, -h);
+    ctx2.restore();
+    
+    const f3 = document.createElement('canvas');
+    f3.width = Math.ceil(w * 1.05);
+    f3.height = h;
+    const ctx3 = f3.getContext('2d');
+    ctx3.save();
+    ctx3.translate(f3.width / 2, h);
+    ctx3.scale(0.96, 1.05);
+    ctx3.transform(1, 0, 0.06, 1, 0, 0); // Tilt backward slightly
+    ctx3.drawImage(canvas, -w / 2, -h);
+    ctx3.restore();
+    
+    return [f1, f2, f3];
+}
+
+function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
     if (spriteCache[src]) return spriteCache[src];
     
     const img = new Image();
@@ -45,21 +171,35 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 30) {
     const spriteObj = {
         loaded: false,
         img: img,
-        canvas: null
+        canvas: null,
+        dataUrl: '',
+        walkFrames: []
     };
     
-    img.onload = () => {
-        spriteObj.canvas = makeImageTransparent(img, keyColor, tolerance);
+    const processImage = () => {
+        if (spriteObj.loaded) return;
+        if (img.naturalWidth === 0 || img.naturalHeight === 0) return;
+        
+        const transparentCanvas = floodFillChromaKey(img, keyColor, tolerance);
+        const trimmedCanvas = trimImage(transparentCanvas);
+        spriteObj.canvas = trimmedCanvas;
+        spriteObj.walkFrames = generateWalkFrames(trimmedCanvas);
+        try {
+            spriteObj.dataUrl = trimmedCanvas.toDataURL();
+        } catch (e) {
+            // Silent block for local CORS
+        }
         spriteObj.loaded = true;
+        
+        if (typeof window.updateDashboardPreview === 'function') {
+            window.updateDashboardPreview();
+        }
     };
+    
+    img.onload = processImage;
     
     if (img.complete) {
-        setTimeout(() => {
-            if (!spriteObj.loaded) {
-                spriteObj.canvas = makeImageTransparent(img, keyColor, tolerance);
-                spriteObj.loaded = true;
-            }
-        }, 1);
+        setTimeout(processImage, 1);
     }
     
     spriteCache[src] = spriteObj;
@@ -877,6 +1017,7 @@ class RetroGameController {
             
             craig_idle: getSprite('assets/craig_idle.png'),
             craig_walk: getSprite('assets/craig_walk.png'),
+            craig_walk2: getSprite('assets/craig_walk2.png'),
             craig_jump: getSprite('assets/craig_jump.png'),
             craig_crouch: getSprite('assets/craig_crouch.png'),
             craig_punch: getSprite('assets/craig_punch.png'),
@@ -1313,6 +1454,11 @@ class RetroGameController {
         }
 
         // --- Player Controls & Physics ---
+        if (this.player.isDucking) {
+            this.player.crouchRatio = Math.min(1, (this.player.crouchRatio || 0) + 0.15);
+        } else {
+            this.player.crouchRatio = Math.max(0, (this.player.crouchRatio || 0) - 0.15);
+        }
         
         // Attack state timer decrements
         if (this.player.state === 'attacking') {
@@ -1499,8 +1645,10 @@ class RetroGameController {
                 if (dist > 250) {
                     thug.x += dir * thug.speed;
                     thug.facing = dir;
+                    thug.isWalking = true;
                 } else {
                     thug.facing = dir;
+                    thug.isWalking = false;
                     thug.throwCooldown--;
                     if (thug.throwCooldown <= 0) {
                         thug.throwCooldown = 110 + Math.random() * 80;
@@ -1519,6 +1667,7 @@ class RetroGameController {
                 // Regular walk up and punch
                 thug.x += dir * thug.speed;
                 thug.facing = dir;
+                thug.isWalking = true;
 
                 // Collision check: Thug punches player
                 if (dist < 32 && yDist < 30 && this.player.state !== 'hurt' && this.player.state !== 'victory') {
@@ -1535,6 +1684,7 @@ class RetroGameController {
                 this.boss.y += this.boss.vy;
                 this.boss.x += this.boss.vx;
                 this.boss.vx *= 0.95;
+                this.boss.isWalking = false;
 
                 if (this.boss.y >= this.groundY) {
                     this.boss.y = this.groundY;
@@ -1546,6 +1696,7 @@ class RetroGameController {
                 const dir = (this.player.x - (this.boss.x - this.scrollOffset) > 0) ? 1 : -1;
                 this.boss.x += dir * this.boss.speed;
                 this.boss.facing = dir;
+                this.boss.isWalking = true;
             }
 
             if (this.boss.flashTimer > 0) this.boss.flashTimer--;
@@ -2303,21 +2454,38 @@ class RetroGameController {
     drawCraig() {
         const p = this.player;
         let sprite = null;
-        if (p.state === 'idle') sprite = this.sprites.craig_idle;
-        else if (p.state === 'walking') sprite = this.sprites.craig_walk;
-        else if (p.state === 'jumping') sprite = this.sprites.craig_jump;
-        else if (p.state === 'ducking') sprite = this.sprites.craig_crouch;
-        else if (p.state === 'attacking') {
-            sprite = (p.attackType === 'kick') ? this.sprites.craig_kick : this.sprites.craig_punch;
-        }
-        else if (p.state === 'hurt') sprite = this.sprites.craig_hurt;
-        else if (p.state === 'victory') sprite = this.sprites.craig_victory;
         
-        if (sprite && sprite.loaded) {
+        // Choose walk sprite cycle if walking
+        if (p.state === 'walking') {
+            const frameIdx = Math.floor(performance.now() / 150) % 4;
+            if (frameIdx === 0) sprite = this.sprites.craig_walk;
+            else if (frameIdx === 1 || frameIdx === 3) sprite = this.sprites.craig_idle;
+            else sprite = this.sprites.craig_walk2;
+        } else if (p.state === 'idle') {
+            sprite = this.sprites.craig_idle;
+        } else if (p.state === 'jumping') {
+            sprite = this.sprites.craig_jump;
+        } else if (p.state === 'ducking') {
+            sprite = this.sprites.craig_crouch;
+        } else if (p.state === 'attacking') {
+            sprite = (p.attackType === 'kick') ? this.sprites.craig_kick : this.sprites.craig_punch;
+        } else if (p.state === 'hurt') {
+            sprite = this.sprites.craig_hurt;
+        } else if (p.state === 'victory') {
+            sprite = this.sprites.craig_victory;
+        }
+        
+        // Swap to crouch sprite when crouchRatio is high
+        if ((p.isDucking || p.state === 'ducking') && (p.crouchRatio || 0) > 0.5) {
+            sprite = this.sprites.craig_crouch;
+        }
+
+        if (sprite && sprite.loaded && this.sprites.craig_idle && this.sprites.craig_idle.loaded) {
             this.ctx.save();
             const feetX = p.x + p.width / 2;
             const feetY = p.y + p.height;
             this.ctx.translate(feetX, feetY);
+            
             if (p.facing === -1) {
                 this.ctx.scale(-1, 1);
             }
@@ -2325,17 +2493,31 @@ class RetroGameController {
                 this.ctx.translate((Math.random() - 0.5) * 8, 0);
             }
             
+            // Proportional scaling relative to the idle sprite trimmed height
+            const refIdleHeight = this.sprites.craig_idle.canvas.height;
+            const baseScale = 110 / refIdleHeight;
+            
+            // Squash and stretch scale for crouching transition
+            const crouchRatio = p.crouchRatio || 0;
+            const yScale = 1 - crouchRatio * 0.35;
+            const xScale = 1 + crouchRatio * 0.15;
+            
+            this.ctx.scale(xScale, yScale);
+            
+            const drawW = sprite.canvas.width * baseScale;
+            const drawH = sprite.canvas.height * baseScale;
+            
             // Draw aura glow effect behind Craig
             this.ctx.save();
             this.ctx.globalCompositeOperation = 'screen';
             this.ctx.shadowColor = '#a855f7';
             this.ctx.shadowBlur = 15;
             this.ctx.globalAlpha = 0.35 + Math.sin(performance.now() * 0.006) * 0.15;
-            this.ctx.drawImage(sprite.canvas, -60, -115, 120, 120);
+            this.ctx.drawImage(sprite.canvas, -drawW / 2 - 5, -drawH - 5, drawW + 10, drawH + 10);
             this.ctx.restore();
             
-            // Draw character
-            this.ctx.drawImage(sprite.canvas, -55, -110, 110, 110);
+            // Draw character (foot-anchored: bottom of sprite is at y=0)
+            this.ctx.drawImage(sprite.canvas, -drawW / 2, -drawH, drawW, drawH);
             this.ctx.restore();
         } else {
             this.drawCraigVector();
@@ -2796,13 +2978,29 @@ class RetroGameController {
         const feetY = thug.y + thug.height;
         const sprite = (thug.style === 0 || thug.style === 2) ? this.sprites.thug_afro : this.sprites.thug_leather;
         
-        if (sprite && sprite.loaded) {
+        if (sprite && sprite.loaded && this.sprites.craig_idle && this.sprites.craig_idle.loaded) {
             this.ctx.save();
             this.ctx.translate(feetX, feetY);
+            
             if (thug.facing === 1) {
                 this.ctx.scale(-1, 1);
             }
-            this.ctx.drawImage(sprite.canvas, -55, -110, 110, 110);
+            
+            // Choose active frame from walkFrames if walking
+            let activeCanvas = sprite.canvas;
+            if (thug.isWalking && sprite.walkFrames && sprite.walkFrames.length >= 3) {
+                const walkCycle = Math.floor((performance.now() + (thug.x * 2.5)) / 150) % 3;
+                activeCanvas = sprite.walkFrames[walkCycle];
+            }
+            
+            // Scale using the Craig reference scale to ensure thugs and Craig are perfectly proportioned
+            const refIdleHeight = this.sprites.craig_idle.canvas.height;
+            const baseScale = 110 / refIdleHeight;
+            
+            const drawW = activeCanvas.width * baseScale;
+            const drawH = activeCanvas.height * baseScale;
+            
+            this.ctx.drawImage(activeCanvas, -drawW / 2, -drawH, drawW, drawH);
             this.ctx.restore();
         } else {
             this.drawThugVector(thug);
@@ -3137,21 +3335,36 @@ class RetroGameController {
         else if (b.bossStyle === 'vigilante-clone') sprite = this.sprites.craig_idle;
         else if (b.bossStyle === 'dark-master') sprite = this.sprites.craig_victory;
         
-        if (sprite && sprite.loaded) {
+        if (sprite && sprite.loaded && this.sprites.craig_idle && this.sprites.craig_idle.loaded) {
             this.ctx.save();
             this.ctx.translate(feetX, feetY);
             if (b.facing === 1) {
                 this.ctx.scale(-1, 1);
             }
+            
+            // Choose active frame from walkFrames
+            let activeCanvas = sprite.canvas;
+            if (b.isWalking && sprite.walkFrames && sprite.walkFrames.length >= 3) {
+                const walkCycle = Math.floor((performance.now() + (b.x * 2.5)) / 150) % 3;
+                activeCanvas = sprite.walkFrames[walkCycle];
+            }
+            
+            // Proportional scaling relative to the idle sprite height, bosses are slightly larger (120 reference height)
+            const refIdleHeight = this.sprites.craig_idle.canvas.height;
+            const baseScale = 120 / refIdleHeight;
+            
+            const drawW = activeCanvas.width * baseScale;
+            const drawH = activeCanvas.height * baseScale;
+            
             if (b.flashTimer > 0 && Math.floor(b.flashTimer / 2) % 2 === 0) {
                 this.ctx.save();
-                this.ctx.drawImage(sprite.canvas, -60, -120, 120, 120);
+                this.ctx.drawImage(activeCanvas, -drawW / 2, -drawH, drawW, drawH);
                 this.ctx.globalCompositeOperation = 'source-atop';
                 this.ctx.fillStyle = 'rgba(230, 57, 70, 0.6)';
-                this.ctx.fillRect(-60, -120, 120, 120);
+                this.ctx.fillRect(-drawW / 2, -drawH, drawW, drawH);
                 this.ctx.restore();
             } else {
-                this.ctx.drawImage(sprite.canvas, -60, -120, 120, 120);
+                this.ctx.drawImage(activeCanvas, -drawW / 2, -drawH, drawW, drawH);
             }
             this.ctx.restore();
         } else {
