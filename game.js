@@ -124,14 +124,14 @@ function getCentralComponent(canvas) {
         
         const colActive = new Uint8Array(width);
         for (let x = 0; x < width; x++) {
-            let active = false;
+            let activeCount = 0;
             for (let y = 0; y < height; y++) {
                 if (data[(y * width + x) * 4 + 3] > 0) {
-                    active = true;
-                    break;
+                    activeCount++;
                 }
             }
-            colActive[x] = active ? 1 : 0;
+            // Active if column has at least 12 visible pixels (ignores noise/artifacts)
+            colActive[x] = (activeCount >= 12) ? 1 : 0;
         }
         
         const intervals = [];
@@ -190,6 +190,33 @@ function getCentralComponent(canvas) {
         if (!found) {
             return {minX: bestInterval.start, maxX: bestInterval.end, minY: 0, maxY: height - 1};
         }
+        
+        // Crop bottom shadows: scan from maxY upwards.
+        // If a row consists only of transparent or dark shadow-like pixels, move maxY up.
+        let feetY = maxY;
+        for (let y = maxY; y > minY; y--) {
+            let hasRealFootPixel = false;
+            for (let x = bestInterval.start; x <= bestInterval.end; x++) {
+                const idx = (y * width + x) * 4;
+                const a = data[idx + 3];
+                if (a > 0) {
+                    const r = data[idx];
+                    const g = data[idx + 1];
+                    const b = data[idx + 2];
+                    const distSq = r * r + g * g + b * b;
+                    // If pixel is brighter than dark shadow threshold, it's a real foot pixel!
+                    if (distSq > 5625) { // 75^2
+                        hasRealFootPixel = true;
+                        break;
+                    }
+                }
+            }
+            if (hasRealFootPixel) {
+                feetY = y;
+                break;
+            }
+        }
+        maxY = feetY;
         
         return {
             minX: bestInterval.start,
@@ -1768,8 +1795,36 @@ class RetroGameController {
             }
         }
 
+        // Apply separation/avoidance between thugs to prevent them from morphing/overlapping
+        for (let i = 0; i < this.thugs.length; i++) {
+            for (let j = i + 1; j < this.thugs.length; j++) {
+                const t1 = this.thugs[i];
+                const t2 = this.thugs[j];
+                const dx = t1.x - t2.x;
+                const dist = Math.abs(dx);
+                
+                // If they are too close horizontally, gently push them apart
+                if (dist < 45) {
+                    const overlap = 45 - dist;
+                    const push = (dx >= 0 ? 1 : -1) * overlap * 0.5;
+                    t1.x += push;
+                    t2.x -= push;
+                }
+            }
+        }
+
         // Update Boss
         if (this.boss) {
+            // Boss pushes thugs away horizontally
+            for (const thug of this.thugs) {
+                const dx = thug.x - this.boss.x;
+                const dist = Math.abs(dx);
+                if (dist < 55) {
+                    const push = (dx >= 0 ? 1 : -1) * (55 - dist) * 0.6;
+                    thug.x += push;
+                }
+            }
+
             // Apply physics to Boss for knockbacks
             if (this.boss.vy !== 0 || this.boss.y < this.groundY) {
                 this.boss.vy += 0.5;
@@ -2548,11 +2603,18 @@ class RetroGameController {
         let sprite = null;
         
         // Choose walk sprite cycle if walking
+        let walkBounceY = 1.0;
+        let walkBounceX = 1.0;
         if (p.state === 'walking') {
             const frameIdx = Math.floor(performance.now() / 150) % 4;
             if (frameIdx === 0) sprite = this.sprites.craig_walk;
             else if (frameIdx === 1 || frameIdx === 3) sprite = this.sprites.craig_idle;
             else sprite = this.sprites.craig_walk2;
+            
+            // Add procedural walk bobbing (squash/stretch)
+            const phase = performance.now() * 0.015;
+            walkBounceY = 1.0 + Math.sin(phase) * 0.025; // 2.5% bounce
+            walkBounceX = 1.0 - Math.sin(phase) * 0.015;
         } else if (p.state === 'idle') {
             sprite = this.sprites.craig_idle;
         } else if (p.state === 'jumping') {
@@ -2591,9 +2653,9 @@ class RetroGameController {
             const refIdleHeight = this.sprites.craig_idle.canvas.height;
             const baseScale = 110 / refIdleHeight;
             
-            // Squash and stretch scale: apply only during transition, not to the crouched sprite itself
-            const yScale = isCrouched ? 1.0 : (1 - crouchRatio * 0.35);
-            const xScale = isCrouched ? 1.0 : (1 + crouchRatio * 0.15);
+            // Squash and stretch scale: apply walk bounce or crouch scale
+            const yScale = isCrouched ? 1.0 : (p.state === 'walking' ? walkBounceY : (1 - crouchRatio * 0.35));
+            const xScale = isCrouched ? 1.0 : (p.state === 'walking' ? walkBounceX : (1 + crouchRatio * 0.15));
             
             this.ctx.scale(xScale, yScale);
             
