@@ -770,7 +770,6 @@ class RetroAudio {
         } catch(e) {}
     }
 }
-}
 
 const gameAudio = new RetroAudio();
 
