@@ -1076,14 +1076,16 @@ class RetroGameController {
             this.ctx.translate(-p.width, 0);
         }
 
-        const isVigilante = true; // Use Vigilante Suit by default for the retro game
-        const robeColor = '#2f3e46'; // hoodie grey
-        const sleeveColor = '#2f3e46';
-        const legColor = '#354f52'; // dark jeans
-        const bootColor = '#111';
+        // Muscular Tanned skin color & Saffron Robe colors
+        const skinColor = '#e89a80';
+        const pantsColor = '#e05a10';
+        const robeColor = '#e05a10';
+        const sleeveColor = '#e05a10';
+        const wrapColor = '#ffb703';
+        const bootColor = '#2b2d42';
 
         // 1. Draw Legs
-        this.ctx.fillStyle = legColor;
+        this.ctx.fillStyle = pantsColor;
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 3.5;
         
@@ -1093,134 +1095,295 @@ class RetroGameController {
             legOffset = Math.sin(performance.now() * 0.015) * 8;
         }
 
+        // Left leg (back)
         this.ctx.beginPath();
-        this.ctx.rect(5, 50, 14, 20); // Left leg
-        this.ctx.rect(26, 50, 14, 20); // Right leg
+        this.ctx.roundRect(3 + legOffset, 48, 16, 22, [4]);
         this.ctx.fill();
         this.ctx.stroke();
 
-        // Boots
+        // Right leg (front)
+        this.ctx.beginPath();
+        this.ctx.roundRect(24 - legOffset, 48, 16, 22, [4]);
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        // Leg wraps (gold wraps on lower legs)
+        this.ctx.fillStyle = wrapColor;
+        this.ctx.beginPath();
+        this.ctx.rect(3 + legOffset, 58, 16, 11);
+        this.ctx.rect(24 - legOffset, 58, 16, 11);
+        this.ctx.fill();
+        this.ctx.stroke();
+        
+        // Draw wrap bands (black lines)
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(3 + legOffset, 63); this.ctx.lineTo(19 + legOffset, 63);
+        this.ctx.moveTo(24 - legOffset, 63); this.ctx.lineTo(40 - legOffset, 63);
+        this.ctx.stroke();
+
+        // Shoes
         this.ctx.fillStyle = bootColor;
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 3.5;
         this.ctx.beginPath();
-        this.ctx.rect(1 + legOffset, 70, 18, 6);
-        this.ctx.rect(26 - legOffset, 70, 18, 6);
+        this.ctx.roundRect(1 + legOffset, 69, 19, 7, [3]);
+        this.ctx.roundRect(22 - legOffset, 69, 19, 7, [3]);
         this.ctx.fill();
         this.ctx.stroke();
 
-        // 2. Draw Arms (back)
-        this.ctx.fillStyle = sleeveColor;
+        // 2. Draw Arms (back - left sleeved arm)
         if (p.state !== 'attacking') {
+            // Sleeve shoulder
+            this.ctx.fillStyle = sleeveColor;
+            this.ctx.strokeStyle = '#000';
+            this.ctx.lineWidth = 3.5;
             this.ctx.beginPath();
-            this.ctx.arc(3, 30, 8, 0, Math.PI * 2); // left hand shoulder
+            this.ctx.arc(4, 28, 11, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.stroke();
+            
+            // Forearm sleeve
+            this.ctx.beginPath();
+            this.ctx.arc(-2, 38, 9, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Hand (bare skin)
+            this.ctx.fillStyle = skinColor;
+            this.ctx.beginPath();
+            this.ctx.arc(-5, 45, 8, 0, Math.PI * 2);
             this.ctx.fill();
             this.ctx.stroke();
         }
 
-        // 3. Torso (Hoodie)
-        this.ctx.fillStyle = robeColor;
+        // 3. Torso (Bare chest on right, torn robe on left)
+        this.ctx.fillStyle = skinColor;
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 3.5;
         this.ctx.beginPath();
-        this.ctx.roundRect(4, 20, 37, 34, [6]);
+        this.ctx.roundRect(4, 20, 37, 32, [6]);
         this.ctx.fill();
         this.ctx.stroke();
 
-        // zipper line
-        this.ctx.strokeStyle = '#1f292e';
-        this.ctx.lineWidth = 3;
+        // Muscle details (pecs / abs / vascular lines)
+        this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+        this.ctx.lineWidth = 2.5;
         this.ctx.beginPath();
-        this.ctx.moveTo(22, 20);
-        this.ctx.lineTo(22, 54);
+        this.ctx.moveTo(20, 29); this.ctx.lineTo(36, 29); // Right chest line (pec)
+        this.ctx.moveTo(20, 29); this.ctx.lineTo(20, 39); // Sternum line
+        this.ctx.moveTo(20, 39); this.ctx.lineTo(32, 39); // Abs row 1
+        this.ctx.moveTo(20, 45); this.ctx.lineTo(30, 45); // Abs row 2
         this.ctx.stroke();
 
-        // 4. Arms (front) & Hands
-        this.ctx.fillStyle = sleeveColor;
+        // Torn robe covering left shoulder/torso half
+        this.ctx.fillStyle = robeColor;
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 3.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(4, 20);
+        this.ctx.lineTo(18, 20);
+        this.ctx.lineTo(15, 26); // Jagged tear 1
+        this.ctx.lineTo(21, 32); // Jagged tear 2
+        this.ctx.lineTo(12, 38); // Jagged tear 3
+        this.ctx.lineTo(18, 44); // Jagged tear 4
+        this.ctx.lineTo(15, 52);
+        this.ctx.lineTo(4, 52);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        // Waist Sash (Black belt)
+        this.ctx.fillStyle = '#111';
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 3;
+        this.ctx.beginPath();
+        this.ctx.roundRect(2, 46, 41, 7, [2]);
+        this.ctx.fill();
+        this.ctx.stroke();
+        
+        // Hanging sash tails
+        this.ctx.beginPath();
+        this.ctx.moveTo(12, 53);
+        this.ctx.lineTo(10, 68);
+        this.ctx.lineTo(6, 67);
+        this.ctx.lineTo(8, 53);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        // 4. Front Arm (front - right bare muscular arm)
+        this.ctx.fillStyle = skinColor;
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 3.5;
         
         if (p.state === 'attacking') {
             if (p.attackType === 'punch') {
-                // Punching arm stretched right
+                // Punching bare arm: huge biceps & deltoid
                 this.ctx.beginPath();
-                this.ctx.rect(20, 22, 35, 12);
+                this.ctx.arc(28, 24, 13, 0, Math.PI * 2); // Deltoid
                 this.ctx.fill();
                 this.ctx.stroke();
-                // Fist
-                this.ctx.fillStyle = '#f5cac3'; // skin
+
                 this.ctx.beginPath();
-                this.ctx.arc(55, 28, 9, 0, Math.PI * 2);
+                this.ctx.arc(39, 23, 11, 0, Math.PI * 2); // Bicep
                 this.ctx.fill();
+                this.ctx.stroke();
+
+                this.ctx.beginPath();
+                this.ctx.arc(50, 24, 10, 0, Math.PI * 2); // Forearm
+                this.ctx.fill();
+                this.ctx.stroke();
+                
+                // Giant Fist
+                this.ctx.beginPath();
+                this.ctx.arc(62, 24, 12, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                // Muscle definition lines
+                this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(33, 20); this.ctx.quadraticCurveTo(39, 16, 45, 20);
+                this.ctx.moveTo(46, 26); this.ctx.quadraticCurveTo(51, 28, 55, 25);
                 this.ctx.stroke();
             } else {
-                // Kick sweep leg stretched right (extended draw)
-                this.ctx.fillStyle = legColor;
+                // Kick sweep bare leg: saffron pants, thick and dynamic
+                this.ctx.fillStyle = pantsColor;
                 this.ctx.beginPath();
-                this.ctx.rect(25, 40, 38, 14);
+                this.ctx.roundRect(25, 38, 40, 16, [4]);
                 this.ctx.fill();
                 this.ctx.stroke();
-                // shoe kick tip
+                
                 this.ctx.fillStyle = bootColor;
                 this.ctx.beginPath();
-                this.ctx.rect(63, 38, 8, 18);
+                this.ctx.roundRect(65, 36, 9, 20, [3]);
                 this.ctx.fill();
                 this.ctx.stroke();
             }
         } else {
-            // Default arm guard position
+            // Idle/walking flexed muscular arm
             this.ctx.beginPath();
-            this.ctx.arc(38, 30, 8, 0, Math.PI * 2);
+            this.ctx.arc(38, 22, 13, 0, Math.PI * 2); // Deltoid
             this.ctx.fill();
+            this.ctx.stroke();
+
+            this.ctx.beginPath();
+            this.ctx.arc(44, 32, 11, 0, Math.PI * 2); // Bicep
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            this.ctx.beginPath();
+            this.ctx.arc(46, 44, 10, 0, Math.PI * 2); // Fist
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Muscle line
+            this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+            this.ctx.lineWidth = 2;
+            this.ctx.beginPath();
+            this.ctx.moveTo(38, 28); this.ctx.quadraticCurveTo(43, 27, 45, 33);
             this.ctx.stroke();
         }
 
-        // 5. Head & Face
-        // Draw hood backing
-        this.ctx.fillStyle = '#1f292e';
+        // 5. Head & Face (Bald scalp, angry brows, gritted teeth)
+        this.ctx.fillStyle = skinColor;
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 3.5;
+        
+        // Bald head
         this.ctx.beginPath();
-        this.ctx.arc(22, 2, 24, 0, Math.PI * 2);
+        this.ctx.arc(22, 2, 16, 0, Math.PI * 2);
         this.ctx.fill();
         this.ctx.stroke();
 
-        // Round head
-        this.ctx.fillStyle = '#f5cac3';
+        // Ears
         this.ctx.beginPath();
-        this.ctx.arc(22, 2, 18, 0, Math.PI * 2);
+        this.ctx.arc(6, 2, 4, 0, Math.PI * 2);
+        this.ctx.arc(38, 2, 4, 0, Math.PI * 2);
         this.ctx.fill();
         this.ctx.stroke();
 
         // Face details
-        this.ctx.fillStyle = '#000';
         if (p.state === 'hurt') {
-            // Hurt eyes (crosses)
-            this.ctx.font = '12px Courier';
-            this.ctx.fillText('x', 11, 2);
-            this.ctx.fillText('x', 24, 2);
-        } else {
-            // Angry vigilante eyes
-            this.ctx.beginPath();
-            this.ctx.arc(14, 0, 3, 0, Math.PI*2);
-            this.ctx.arc(26, 0, 3, 0, Math.PI*2);
-            this.ctx.fill();
-            // Angry eyebrows
+            this.ctx.fillStyle = '#000';
+            this.ctx.font = 'bold 12px Courier';
+            this.ctx.fillText('x', 13, 2);
+            this.ctx.fillText('x', 25, 2);
+            
             this.ctx.strokeStyle = '#000';
             this.ctx.lineWidth = 2.5;
             this.ctx.beginPath();
-            this.ctx.moveTo(8, -5); this.ctx.lineTo(16, -1);
-            this.ctx.moveTo(30, -5); this.ctx.lineTo(22, -1);
+            this.ctx.moveTo(16, 8); this.ctx.lineTo(28, 6);
+            this.ctx.stroke();
+        } else {
+            // Angry slanted white eyes
+            this.ctx.fillStyle = '#fff';
+            this.ctx.strokeStyle = '#000';
+            this.ctx.lineWidth = 2;
+            
+            // Left eye
+            this.ctx.beginPath();
+            this.ctx.moveTo(11, 2);
+            this.ctx.lineTo(19, 4);
+            this.ctx.lineTo(16, -1);
+            this.ctx.closePath();
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Right eye
+            this.ctx.beginPath();
+            this.ctx.moveTo(33, 2);
+            this.ctx.lineTo(25, 4);
+            this.ctx.lineTo(28, -1);
+            this.ctx.closePath();
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Pupils
+            this.ctx.fillStyle = '#000';
+            this.ctx.beginPath();
+            this.ctx.arc(15, 2, 1.5, 0, Math.PI * 2);
+            this.ctx.arc(29, 2, 1.5, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // Thick angry eyebrows
+            this.ctx.strokeStyle = '#000';
+            this.ctx.lineWidth = 3.5;
+            this.ctx.beginPath();
+            this.ctx.moveTo(8, -4); this.ctx.lineTo(19, 1);
+            this.ctx.moveTo(36, -4); this.ctx.lineTo(25, 1);
+            this.ctx.stroke();
+
+            // Forehead wrinkles / veins
+            this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+            this.ctx.lineWidth = 1.5;
+            this.ctx.beginPath();
+            this.ctx.moveTo(18, -8); this.ctx.lineTo(22, -6);
+            this.ctx.moveTo(22, -8); this.ctx.lineTo(26, -9);
+            this.ctx.stroke();
+
+            // Open gritting teeth mouth
+            this.ctx.fillStyle = '#fff';
+            this.ctx.strokeStyle = '#000';
+            this.ctx.lineWidth = 2.5;
+            this.ctx.beginPath();
+            this.ctx.roundRect(14, 7, 16, 8, [2]);
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Teeth grid
+            this.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.moveTo(14, 11); this.ctx.lineTo(30, 11);
+            this.ctx.moveTo(18, 7); this.ctx.lineTo(18, 15);
+            this.ctx.moveTo(22, 7); this.ctx.lineTo(22, 15);
+            this.ctx.moveTo(26, 7); this.ctx.lineTo(26, 15);
             this.ctx.stroke();
         }
-
-        // Grim mouth line
-        this.ctx.strokeStyle = '#000';
-        this.ctx.lineWidth = 2.5;
-        this.ctx.beginPath();
-        if (p.state === 'victory') {
-            // happy smile
-            this.ctx.arc(20, 7, 5, 0, Math.PI);
-        } else {
-            // straight line
-            this.ctx.moveTo(15, 9);
-            this.ctx.lineTo(25, 9);
-        }
-        this.ctx.stroke();
 
         this.ctx.restore();
     }
