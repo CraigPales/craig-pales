@@ -4,7 +4,7 @@
 const spriteCache = {};
 window.spriteCache = spriteCache;
 
-function floodFillChromaKey(img, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
+function floodFillChromaKey(img, keyColor = {r: 0, g: 0, b: 0}, tolerance = 50) {
     const tempCanvas = document.createElement('canvas');
     const width = img.naturalWidth || img.width;
     const height = img.naturalHeight || img.height;
@@ -77,6 +77,35 @@ function floodFillChromaKey(img, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) 
             }
         }
         
+        // Post-process: clean up dark border pixels (anti-aliasing halo residue)
+        const borderPixels = [];
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                const idx = y * width + x;
+                if (data[idx * 4 + 3] > 0) {
+                    const n1 = idx + 1;
+                    const n2 = idx - 1;
+                    const n3 = idx + width;
+                    const n4 = idx - width;
+                    
+                    if (data[n1 * 4 + 3] === 0 || data[n2 * 4 + 3] === 0 || data[n3 * 4 + 3] === 0 || data[n4 * 4 + 3] === 0) {
+                        const r = data[idx * 4];
+                        const g = data[idx * 4 + 1];
+                        const b = data[idx * 4 + 2];
+                        const distSq = (r - keyColor.r) * (r - keyColor.r) +
+                                       (g - keyColor.g) * (g - keyColor.g) +
+                                       (b - keyColor.b) * (b - keyColor.b);
+                        if (distSq < 2025) { // 45^2
+                            borderPixels.push(idx);
+                        }
+                    }
+                }
+            }
+        }
+        for (const idx of borderPixels) {
+            data[idx * 4 + 3] = 0;
+        }
+        
         tempCtx.putImageData(imgData, 0, 0);
     } catch (e) {
         console.warn("Flood fill chroma key failed (CORS/context):", e);
@@ -84,8 +113,7 @@ function floodFillChromaKey(img, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) 
     return tempCanvas;
 }
 
-function trimImage(canvas) {
-    if (canvas.width === 0 || canvas.height === 0) return canvas;
+function getCentralComponent(canvas) {
     const ctx = canvas.getContext('2d');
     const width = canvas.width;
     const height = canvas.height;
@@ -94,18 +122,64 @@ function trimImage(canvas) {
         const imgData = ctx.getImageData(0, 0, width, height);
         const data = imgData.data;
         
-        let minX = width;
+        const colActive = new Uint8Array(width);
+        for (let x = 0; x < width; x++) {
+            let active = false;
+            for (let y = 0; y < height; y++) {
+                if (data[(y * width + x) * 4 + 3] > 0) {
+                    active = true;
+                    break;
+                }
+            }
+            colActive[x] = active ? 1 : 0;
+        }
+        
+        const intervals = [];
+        let inInterval = false;
+        let startX = 0;
+        for (let x = 0; x < width; x++) {
+            if (colActive[x]) {
+                if (!inInterval) {
+                    startX = x;
+                    inInterval = true;
+                }
+            } else {
+                if (inInterval) {
+                    intervals.push({start: startX, end: x - 1});
+                    inInterval = false;
+                }
+            }
+        }
+        if (inInterval) {
+            intervals.push({start: startX, end: width - 1});
+        }
+        
+        if (intervals.length === 0) return {minX: 0, maxX: width - 1, minY: 0, maxY: height - 1};
+        
+        let bestInterval = intervals[0];
+        let bestScore = -Infinity;
+        const center = width / 2;
+        
+        for (const inter of intervals) {
+            const w = inter.end - inter.start + 1;
+            const interCenter = (inter.start + inter.end) / 2;
+            const dist = Math.abs(interCenter - center);
+            
+            if (w < 25 && intervals.length > 1) continue;
+            
+            const score = w - dist * 1.5;
+            if (score > bestScore) {
+                bestScore = score;
+                bestInterval = inter;
+            }
+        }
+        
         let minY = height;
-        let maxX = 0;
         let maxY = 0;
         let found = false;
-        
         for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const alpha = data[(y * width + x) * 4 + 3];
-                if (alpha > 0) {
-                    if (x < minX) minX = x;
-                    if (x > maxX) maxX = x;
+            for (let x = bestInterval.start; x <= bestInterval.end; x++) {
+                if (data[(y * width + x) * 4 + 3] > 0) {
                     if (y < minY) minY = y;
                     if (y > maxY) maxY = y;
                     found = true;
@@ -113,17 +187,35 @@ function trimImage(canvas) {
             }
         }
         
-        if (!found) return canvas;
+        if (!found) {
+            return {minX: bestInterval.start, maxX: bestInterval.end, minY: 0, maxY: height - 1};
+        }
         
-        const trimWidth = maxX - minX + 1;
-        const trimHeight = maxY - minY + 1;
+        return {
+            minX: bestInterval.start,
+            maxX: bestInterval.end,
+            minY: minY,
+            maxY: maxY
+        };
+    } catch (e) {
+        return {minX: 0, maxX: width - 1, minY: 0, maxY: height - 1};
+    }
+}
+
+function trimImage(canvas) {
+    if (canvas.width === 0 || canvas.height === 0) return canvas;
+    
+    try {
+        const bounds = getCentralComponent(canvas);
+        const trimWidth = bounds.maxX - bounds.minX + 1;
+        const trimHeight = bounds.maxY - bounds.minY + 1;
         
         const trimmedCanvas = document.createElement('canvas');
         trimmedCanvas.width = trimWidth;
         trimmedCanvas.height = trimHeight;
         const trimmedCtx = trimmedCanvas.getContext('2d');
         
-        trimmedCtx.drawImage(canvas, minX, minY, trimWidth, trimHeight, 0, 0, trimWidth, trimHeight);
+        trimmedCtx.drawImage(canvas, bounds.minX, bounds.minY, trimWidth, trimHeight, 0, 0, trimWidth, trimHeight);
         return trimmedCanvas;
     } catch (e) {
         console.warn("Trim image failed:", e);
@@ -2476,7 +2568,9 @@ class RetroGameController {
         }
         
         // Swap to crouch sprite when crouchRatio is high
-        if ((p.isDucking || p.state === 'ducking') && (p.crouchRatio || 0) > 0.5) {
+        const crouchRatio = p.crouchRatio || 0;
+        const isCrouched = (p.isDucking || p.state === 'ducking') && crouchRatio > 0.5;
+        if (isCrouched) {
             sprite = this.sprites.craig_crouch;
         }
 
@@ -2497,23 +2591,21 @@ class RetroGameController {
             const refIdleHeight = this.sprites.craig_idle.canvas.height;
             const baseScale = 110 / refIdleHeight;
             
-            // Squash and stretch scale for crouching transition
-            const crouchRatio = p.crouchRatio || 0;
-            const yScale = 1 - crouchRatio * 0.35;
-            const xScale = 1 + crouchRatio * 0.15;
+            // Squash and stretch scale: apply only during transition, not to the crouched sprite itself
+            const yScale = isCrouched ? 1.0 : (1 - crouchRatio * 0.35);
+            const xScale = isCrouched ? 1.0 : (1 + crouchRatio * 0.15);
             
             this.ctx.scale(xScale, yScale);
             
             const drawW = sprite.canvas.width * baseScale;
             const drawH = sprite.canvas.height * baseScale;
             
-            // Draw aura glow effect behind Craig
+            // Draw aura glow shadow effect behind Craig (at exact size to avoid white borders)
             this.ctx.save();
-            this.ctx.globalCompositeOperation = 'screen';
             this.ctx.shadowColor = '#a855f7';
             this.ctx.shadowBlur = 15;
             this.ctx.globalAlpha = 0.35 + Math.sin(performance.now() * 0.006) * 0.15;
-            this.ctx.drawImage(sprite.canvas, -drawW / 2 - 5, -drawH - 5, drawW + 10, drawH + 10);
+            this.ctx.drawImage(sprite.canvas, -drawW / 2, -drawH, drawW, drawH);
             this.ctx.restore();
             
             // Draw character (foot-anchored: bottom of sprite is at y=0)
@@ -2982,7 +3074,8 @@ class RetroGameController {
             this.ctx.save();
             this.ctx.translate(feetX, feetY);
             
-            if (thug.facing === 1) {
+            const defaultFacing = (thug.style === 0 || thug.style === 2) ? -1 : 1;
+            if (thug.facing !== defaultFacing) {
                 this.ctx.scale(-1, 1);
             }
             
@@ -3338,7 +3431,11 @@ class RetroGameController {
         if (sprite && sprite.loaded && this.sprites.craig_idle && this.sprites.craig_idle.loaded) {
             this.ctx.save();
             this.ctx.translate(feetX, feetY);
-            if (b.facing === 1) {
+            let defaultFacing = -1;
+            if (b.bossStyle === 'elder' || b.bossStyle === 'vigilante-clone' || b.bossStyle === 'dark-master') {
+                defaultFacing = 1;
+            }
+            if (b.facing !== defaultFacing) {
                 this.ctx.scale(-1, 1);
             }
             

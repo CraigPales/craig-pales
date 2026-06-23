@@ -248,6 +248,11 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
         craigH = 160;
     }
 
+    // Determine if Craig needs to be flipped (e.g. facing left towards Sensei or Ambushing thug on his left)
+    const flipCraig = (specialEffect === 'training' || specialEffect === 'ambush');
+    const craigImg = `<image href="${getSpriteSrc(craigPath)}" x="${craigX}" y="${craigY}" width="${craigW}" height="${craigH}" preserveAspectRatio="xMidYMax meet"/>`;
+    const craigElement = flipCraig ? `<g transform="translate(${2 * craigX + craigW}, 0) scale(-1, 1)">${craigImg}</g>` : craigImg;
+
     // Dark arts purple aura filter overlay
     let auraOverlay = '';
     if (outfit !== 'young-robe') {
@@ -269,7 +274,7 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
             ${extraSvg}
 
             <!-- Craig Character -->
-            <image href="${getSpriteSrc(craigPath)}" x="${craigX}" y="${craigY}" width="${craigW}" height="${craigH}" preserveAspectRatio="xMidYMax meet"/>
+            ${craigElement}
 
             <!-- Speech Bubble overlay if dialogue exists -->
             ${dialogue ? `
