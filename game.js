@@ -111,7 +111,7 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
             } else if (src.includes('thug_afro')) {
                 valleys = [253, 776];
             } else if (src.includes('craig_crouch')) {
-                valleys = [220, 730];
+                valleys = [341, 682];
             }
             
             const frames = [];
@@ -141,7 +141,11 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
                 frames.push(trimmedCol);
             }
             
-            spriteObj.canvas = frames[1];
+            if (src.includes('craig_crouch')) {
+                spriteObj.canvas = frames[0];
+            } else {
+                spriteObj.canvas = frames[1];
+            }
             spriteObj.walkFrames = frames;
         } else {
             const trimmedCanvas = trimCanvasSimple(transparentCanvas);
@@ -1674,8 +1678,8 @@ class RetroGameController {
                 name: "Stage 4: Rooftop Showdown",
                 background: "rooftop",
                 length: 2400,
-                bossName: "The Dark Arts Master Craig",
-                bossStyle: 'dark-master',
+                bossName: "Biker Boss Big Joe",
+                bossStyle: 'biker-boss',
                 platforms: [
                     { x: 300, y: 280, w: 160, h: 16 },
                     { x: 380, y: 200, w: 160, h: 16 },
@@ -2494,7 +2498,7 @@ class RetroGameController {
         // Move Player & Parallax Camera Scroll
         if (this.player.vx !== 0) {
             const nextX = this.player.x + this.player.vx;
-            if (nextX > 320 && this.scrollOffset < this.levelLength) {
+            if (this.player.state !== 'hurt' && nextX > 320 && this.scrollOffset < this.levelLength) {
                 // Scroll screen instead of moving character right
                 this.scrollOffset += this.player.vx;
                 if (this.scrollOffset > this.levelLength) {
@@ -2536,13 +2540,20 @@ class RetroGameController {
             if (!this.boss && this.gameState === 'playing') {
                 const lvlData = this.levelData[this.currentLevel - 1];
                 const maxHp = 5 + this.currentLevel * 2;
+                let bW = 55;
+                let bH = 95;
+                if (lvlData.bossStyle === 'biker-boss') {
+                    bW = 72;
+                    bH = 100;
+                }
                 this.boss = {
                     name: lvlData.bossName,
                     style: lvlData.bossStyle,
+                    bossStyle: lvlData.bossStyle,
                     x: 820 + this.scrollOffset, // Spawn in world space
                     y: this.groundY,
-                    width: 55,
-                    height: 95,
+                    width: bW,
+                    height: bH,
                     speed: 1.0 + this.currentLevel * 0.1,
                     health: maxHp,
                     maxHealth: maxHp,
@@ -2550,7 +2561,9 @@ class RetroGameController {
                     throwTimer: 60,
                     flashTimer: 0,
                     vx: 0,
-                    vy: 0
+                    vy: 0,
+                    punchTimer: 0,
+                    punchCooldown: 0
                 };
             }
         }
@@ -2645,13 +2658,19 @@ class RetroGameController {
                 }
             } else {
                 // Boss basic movement
-                const dir = (this.player.x - (this.boss.x - this.scrollOffset) > 0) ? 1 : -1;
-                this.boss.x += dir * this.boss.speed;
-                this.boss.facing = dir;
-                this.boss.isWalking = true;
+                if (this.boss.punchTimer > 0) {
+                    this.boss.isWalking = false;
+                } else {
+                    const dir = (this.player.x - (this.boss.x - this.scrollOffset) > 0) ? 1 : -1;
+                    this.boss.x += dir * this.boss.speed;
+                    this.boss.facing = dir;
+                    this.boss.isWalking = true;
+                }
             }
 
             if (this.boss.flashTimer > 0) this.boss.flashTimer--;
+            if (this.boss.punchTimer > 0) this.boss.punchTimer--;
+            if (this.boss.punchCooldown > 0) this.boss.punchCooldown--;
 
             // Boss attacks
             this.boss.throwTimer--;
@@ -2659,7 +2678,23 @@ class RetroGameController {
                 this.boss.throwTimer = 110 + Math.random() * 60; // 2-3 seconds
                 const bVx = this.boss.facing * 6.5;
                 
-                if (this.boss.style === 'elder') {
+                if (this.boss.style === 'biker-boss') {
+                    // Biker Boss throws dual knives: one straight, one angled downwards!
+                    this.projectiles.push(new KnifeProjectile(
+                        this.boss.x + (this.boss.facing === 1 ? 65 : -15),
+                        this.boss.y + 30,
+                        bVx,
+                        0,
+                        false
+                    ));
+                    this.projectiles.push(new KnifeProjectile(
+                        this.boss.x + (this.boss.facing === 1 ? 65 : -15),
+                        this.boss.y + 30,
+                        bVx,
+                        1.0,
+                        false
+                    ));
+                } else if (this.boss.style === 'elder') {
                     // Sensei throws a fast shuriken (using KnifeProjectile)
                     this.projectiles.push(new KnifeProjectile(
                         this.boss.x + (this.boss.facing === 1 ? 50 : -10),
@@ -2693,11 +2728,19 @@ class RetroGameController {
                 }
             }
 
-            // Contact damage with Boss
+            // Contact damage / Punch with Boss
             const dist = Math.abs((this.player.x + this.player.width/2) - (this.boss.x - this.scrollOffset + this.boss.width/2));
             const yDist = Math.abs(this.player.y - this.boss.y);
-            if (dist < 42 && yDist < 40 && this.player.state !== 'hurt' && this.player.state !== 'victory') {
-                this.triggerPlayerHurt(20);
+            if (dist < 60 && yDist < 40 && this.player.state !== 'hurt' && this.player.state !== 'victory') {
+                if (this.boss.style === 'biker-boss') {
+                    if (this.boss.punchCooldown <= 0) {
+                        this.boss.punchTimer = 15;
+                        this.boss.punchCooldown = 60; // 1 second cooldown
+                        this.triggerPlayerHurt(25, this.boss.facing * 16.0, -5.5); // punch Craig across screen
+                    }
+                } else {
+                    this.triggerPlayerHurt(20);
+                }
             }
         }
 
@@ -2898,9 +2941,14 @@ class RetroGameController {
         // Hurt state timer
         if (this.player.state === 'hurt') {
             this.player.stateTimer--;
-            this.player.x -= this.player.facing * 1.5; // pushback
+            if (this.player.vx !== 0) {
+                this.player.vx *= 0.93;
+            } else {
+                this.player.x -= this.player.facing * 1.5; // default pushback
+            }
             if (this.player.stateTimer <= 0) {
                 this.player.state = 'idle';
+                this.player.vx = 0;
             }
         }
 
@@ -2915,12 +2963,16 @@ class RetroGameController {
         this.slashes = this.slashes.filter(s => s.age < s.maxAge);
     }
 
-    triggerPlayerHurt(dmg) {
+    triggerPlayerHurt(dmg, kx = 0, ky = -3) {
         this.player.health -= dmg;
         this.player.state = 'hurt';
-        this.player.stateTimer = 18; // hurt frames
-        this.player.vy = -3; // slight upward bounce
-        this.screenShake = 12;
+        this.player.stateTimer = kx !== 0 ? 25 : 18; // hurt frames (longer for knockback)
+        this.player.vy = ky;
+        this.player.vx = kx;
+        if (kx !== 0) {
+            this.player.facing = kx > 0 ? -1 : 1; // face the source of damage
+        }
+        this.screenShake = kx !== 0 ? 18 : 12;
         gameAudio.playHurt();
 
         if (this.player.health <= 0) {
@@ -4447,8 +4499,209 @@ class RetroGameController {
             }
             this.ctx.restore();
         } else {
-            this.drawBossVector();
+            if (b.bossStyle === 'biker-boss' || b.style === 'biker-boss') {
+                this.drawBikerBossVector();
+            } else {
+                this.drawBossVector();
+            }
         }
+    }
+
+    drawBikerBossVector() {
+        const b = this.boss;
+        this.ctx.save();
+        this.ctx.translate(b.x - this.scrollOffset, b.y);
+
+        if (b.facing === 1) {
+            this.ctx.scale(-1, 1);
+            this.ctx.translate(-b.width, 0);
+        }
+
+        // Apply hit flashing red
+        if (b.flashTimer > 0 && Math.floor(b.flashTimer / 2) % 2 === 0) {
+            this.ctx.fillStyle = '#e63946';
+        }
+
+        const width = b.width;   // 72
+        const height = b.height; // 100
+
+        // 1. BOOTS (thick black combat boots)
+        this.ctx.fillStyle = '#111113';
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 3;
+        // Left Boot
+        this.ctx.fillRect(8, height - 12, 22, 12);
+        this.ctx.strokeRect(8, height - 12, 22, 12);
+        // Right Boot
+        this.ctx.fillRect(width - 30, height - 12, 22, 12);
+        this.ctx.strokeRect(width - 30, height - 12, 22, 12);
+
+        // 2. LEGS / PANTS (indigo blue jeans)
+        this.ctx.fillStyle = '#1e293b'; 
+        // Left Leg
+        this.ctx.fillRect(10, height - 42, 20, 32);
+        this.ctx.strokeRect(10, height - 42, 20, 32);
+        // Right Leg
+        this.ctx.fillRect(width - 30, height - 42, 20, 32);
+        this.ctx.strokeRect(width - 30, height - 42, 20, 32);
+
+        // Pants crotch area
+        this.ctx.fillRect(10, height - 42, width - 20, 15);
+
+        // 3. HUGE FAT BELLY & CHEST
+        const bellyX = width / 2;
+        const bellyY = height - 52;
+        const bellyR = 28; 
+        this.ctx.fillStyle = '#ffd8a8'; // skin tone
+        this.ctx.beginPath();
+        this.ctx.arc(bellyX, bellyY, bellyR, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        // Navel and hair
+        this.ctx.fillStyle = '#78350f'; // hair color
+        this.ctx.fillRect(bellyX - 1, bellyY + 12, 3, 3); // navel
+        this.ctx.fillStyle = 'rgba(120, 53, 15, 0.4)';
+        this.ctx.fillRect(bellyX - 6, bellyY - 10, 12, 2);
+        this.ctx.fillRect(bellyX - 4, bellyY - 14, 8, 2);
+
+        // 4. BLACK LEATHER VEST (opened at front)
+        this.ctx.fillStyle = '#1c1917'; // leather black
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 3.5;
+        
+        // Left side of vest
+        this.ctx.beginPath();
+        this.ctx.moveTo(8, height - 68);
+        this.ctx.quadraticCurveTo(18, height - 52, 16, height - 32);
+        this.ctx.lineTo(6, height - 32);
+        this.ctx.lineTo(4, height - 68);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        // Right side of vest
+        this.ctx.beginPath();
+        this.ctx.moveTo(width - 8, height - 68);
+        this.ctx.quadraticCurveTo(width - 18, height - 52, width - 16, height - 32);
+        this.ctx.lineTo(width - 6, height - 32);
+        this.ctx.lineTo(width - 4, height - 68);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        // Back collar
+        this.ctx.fillRect(8, height - 76, width - 16, 12);
+
+        // Silver belt buckle
+        this.ctx.fillStyle = '#94a3b8';
+        this.ctx.fillRect(width / 2 - 8, height - 32, 16, 6);
+        this.ctx.strokeRect(width / 2 - 8, height - 32, 16, 6);
+
+        // 5. ARMS & TATTOOS
+        // Left arm (front arm - punching or hanging)
+        this.ctx.save();
+        this.ctx.fillStyle = '#ffd8a8';
+        
+        const isPunching = b.punchTimer > 0;
+        if (isPunching) {
+            // Extended punch arm
+            this.ctx.beginPath();
+            this.ctx.roundRect(-24, height - 72, 38, 20, [8]);
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Heavy glove
+            this.ctx.fillStyle = '#78716c';
+            this.ctx.beginPath();
+            this.ctx.arc(-24, height - 62, 14, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.stroke();
+            
+            // Studs
+            this.ctx.fillStyle = '#e2e8f0';
+            this.ctx.fillRect(-28, height - 66, 3, 3);
+            this.ctx.fillRect(-28, height - 62, 3, 3);
+            this.ctx.fillRect(-28, height - 58, 3, 3);
+        } else {
+            // Hanging arm
+            this.ctx.beginPath();
+            this.ctx.roundRect(-4, height - 74, 16, 34, [6]);
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Studded glove
+            this.ctx.fillStyle = '#78716c';
+            this.ctx.fillRect(-4, height - 44, 16, 10);
+            this.ctx.strokeRect(-4, height - 44, 16, 10);
+
+            // Blue ink tattoo
+            this.ctx.strokeStyle = '#0284c7';
+            this.ctx.lineWidth = 2.5;
+            this.ctx.beginPath();
+            this.ctx.moveTo(2, height - 66);
+            this.ctx.lineTo(8, height - 58);
+            this.ctx.lineTo(2, height - 50);
+            this.ctx.stroke();
+        }
+        this.ctx.restore();
+
+        // Right arm (back arm)
+        this.ctx.save();
+        this.ctx.fillStyle = '#ffd8a8';
+        this.ctx.beginPath();
+        this.ctx.roundRect(width - 12, height - 74, 16, 34, [6]);
+        this.ctx.fill();
+        this.ctx.stroke();
+        this.ctx.restore();
+
+        // 6. HEAD, SHADES, BANDANA & BEARD
+        const headX = width / 2;
+        const headY = height - 80;
+        
+        // Beard
+        this.ctx.fillStyle = '#cbd5e1'; // grey beard
+        this.ctx.strokeStyle = '#475569';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(headX - 16, headY);
+        this.ctx.lineTo(headX - 12, headY + 28);
+        this.ctx.quadraticCurveTo(headX, headY + 36, headX + 12, headY + 28);
+        this.ctx.lineTo(headX + 16, headY);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        // Skin face
+        this.ctx.fillStyle = '#ffd8a8';
+        this.ctx.beginPath();
+        this.ctx.arc(headX, headY - 2, 15, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        // Red bandana
+        this.ctx.fillStyle = '#ef4444';
+        this.ctx.fillRect(headX - 16, headY - 17, 32, 10);
+        this.ctx.strokeRect(headX - 16, headY - 17, 32, 10);
+        
+        // Knot
+        this.ctx.beginPath();
+        this.ctx.moveTo(headX + 14, headY - 12);
+        this.ctx.lineTo(headX + 24, headY - 18);
+        this.ctx.lineTo(headX + 22, headY - 6);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        // Sunglasses
+        this.ctx.fillStyle = '#0f172a';
+        this.ctx.fillRect(headX - 13, headY - 8, 26, 6);
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.strokeRect(headX - 13, headY - 8, 11, 6);
+        this.ctx.strokeRect(headX + 2, headY - 8, 11, 6);
+
+        this.ctx.restore();
     }
 
     drawBossVector() {
