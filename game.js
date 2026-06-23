@@ -1,5 +1,71 @@
 // Craig Pales Retro Action Game Engine (Simplified, Stable NES Style)
 
+// --- Sprite Cache & Chroma Key Engine ---
+const spriteCache = {};
+
+function makeImageTransparent(img, keyColor = {r: 0, g: 0, b: 0}, tolerance = 30) {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = img.naturalWidth || img.width;
+    tempCanvas.height = img.naturalHeight || img.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(img, 0, 0);
+    
+    if (tempCanvas.width === 0 || tempCanvas.height === 0) return tempCanvas;
+    
+    try {
+        const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i+1];
+            const b = data[i+2];
+            
+            const dist = Math.sqrt(
+                Math.pow(r - keyColor.r, 2) +
+                Math.pow(g - keyColor.g, 2) +
+                Math.pow(b - keyColor.b, 2)
+            );
+            
+            if (dist < tolerance) {
+                data[i+3] = 0; // transparent
+            }
+        }
+        tempCtx.putImageData(imgData, 0, 0);
+    } catch (e) {
+        // Silent catch for CORS blocks locally
+    }
+    return tempCanvas;
+}
+
+function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 30) {
+    if (spriteCache[src]) return spriteCache[src];
+    
+    const img = new Image();
+    img.src = src;
+    const spriteObj = {
+        loaded: false,
+        img: img,
+        canvas: null
+    };
+    
+    img.onload = () => {
+        spriteObj.canvas = makeImageTransparent(img, keyColor, tolerance);
+        spriteObj.loaded = true;
+    };
+    
+    if (img.complete) {
+        setTimeout(() => {
+            if (!spriteObj.loaded) {
+                spriteObj.canvas = makeImageTransparent(img, keyColor, tolerance);
+                spriteObj.loaded = true;
+            }
+        }, 1);
+    }
+    
+    spriteCache[src] = spriteObj;
+    return spriteObj;
+}
+
 class RetroAudio {
     constructor() {
         this.ctx = null;
@@ -688,6 +754,7 @@ class RetroGameController {
 
         this.groundY = 350;
         this.scrollOffset = 0;
+        this.screenShake = 0;
         this.levelLength = 2000; // Walk 2000px to reach boss
         this.gameProgress = 0; // 0.0 to 1.0
 
@@ -801,6 +868,29 @@ class RetroGameController {
         this.thugSpawnTimer = 0;
         this.keys = {};
 
+        // Preload sprites
+        this.sprites = {
+            bg_dojo: getSprite('assets/bg_dojo.png'),
+            bg_subway: getSprite('assets/bg_subway.png'),
+            bg_new_york: getSprite('assets/bg_new_york.png'),
+            bg_rooftop: getSprite('assets/bg_rooftop.png'),
+            
+            craig_idle: getSprite('assets/craig_idle.png'),
+            craig_walk: getSprite('assets/craig_walk.png'),
+            craig_jump: getSprite('assets/craig_jump.png'),
+            craig_crouch: getSprite('assets/craig_crouch.png'),
+            craig_punch: getSprite('assets/craig_punch.png'),
+            craig_kick: getSprite('assets/craig_kick.png'),
+            craig_hurt: getSprite('assets/craig_hurt.png'),
+            craig_victory: getSprite('assets/craig_victory.png'),
+            
+            thug_leather: getSprite('assets/thug_leather.png'),
+            thug_afro: getSprite('assets/thug_afro.png'),
+            
+            boss_sensei: getSprite('assets/boss_sensei.png'),
+            boss_slasher: getSprite('assets/boss_slasher.png')
+        };
+
         // Bind Controls
         this.boundKeyDown = this.handleKeyDown.bind(this);
         this.boundKeyUp = this.handleKeyUp.bind(this);
@@ -909,8 +999,16 @@ class RetroGameController {
     }
 
     handleKeyDown(e) {
+        if (e.repeat) return;
         gameAudio.init(); // enable sound on first interaction
         const code = e.code;
+        
+        // Prevent default window scrolling for game controls
+        const gameKeys = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyJ', 'KeyK', 'KeyZ', 'KeyX'];
+        if (gameKeys.includes(code)) {
+            e.preventDefault();
+        }
+
         this.keys[code] = true;
 
         if (this.gameState === 'levelclear') {
@@ -944,12 +1042,18 @@ class RetroGameController {
         const bindBtn = (id, actionDown, actionUp) => {
             const btn = document.getElementById(id);
             if (btn) {
-                btn._handlerDown = () => { gameAudio.init(); actionDown(); };
-                btn._handlerUp = actionUp ? actionUp : () => {};
-                btn.addEventListener('mousedown', btn._handlerDown);
-                btn.addEventListener('mouseup', btn._handlerUp);
-                btn.addEventListener('touchstart', btn._handlerDown, {passive: true});
-                btn.addEventListener('touchend', btn._handlerUp, {passive: true});
+                btn._handlerDown = (evt) => {
+                    evt.preventDefault();
+                    gameAudio.init();
+                    actionDown();
+                };
+                btn._handlerUp = (evt) => {
+                    evt.preventDefault();
+                    if (actionUp) actionUp();
+                };
+                btn.addEventListener('pointerdown', btn._handlerDown);
+                btn.addEventListener('pointerup', btn._handlerUp);
+                btn.addEventListener('pointercancel', btn._handlerUp);
             }
         };
 
@@ -981,13 +1085,13 @@ class RetroGameController {
         const unbindBtn = (id) => {
             const btn = document.getElementById(id);
             if (btn && btn._handlerDown) {
-                btn.removeEventListener('mousedown', btn._handlerDown);
-                btn.removeEventListener('mouseup', btn._handlerUp);
-                btn.removeEventListener('touchstart', btn._handlerDown);
-                btn.removeEventListener('touchend', btn._handlerUp);
+                btn.removeEventListener('pointerdown', btn._handlerDown);
+                btn.removeEventListener('pointerup', btn._handlerUp);
+                btn.removeEventListener('pointercancel', btn._handlerUp);
             }
         };
         unbindBtn('btn-left');
+        unbindBtn('btn-duck');
         unbindBtn('btn-right');
         unbindBtn('btn-jump');
         unbindBtn('btn-punch');
@@ -1056,6 +1160,7 @@ class RetroGameController {
                 // Slice Thug in half!
                 gameAudio.playSlice();
                 this.player.score += 100;
+                this.screenShake = 6;
                 
                 // Spawn Gore
                 this.spawnGore(thug.x + thug.width/2, thug.y + thug.height/2, 'thug', thug.style);
@@ -1076,6 +1181,7 @@ class RetroGameController {
             if (dist < range && yDist < 40 && correctDirection) {
                 dest.health--;
                 dest.flashTimer = 8;
+                this.screenShake = 4;
                 gameAudio.playPunch();
                 
                 if (dest.health <= 0) {
@@ -1110,6 +1216,7 @@ class RetroGameController {
             if (dist < range + 20 && yDist < 50 && correctDirection) {
                 this.boss.health--;
                 this.boss.flashTimer = 8;
+                this.screenShake = 8;
                 
                 if (this.boss.health <= 0) {
                     // Defeated Boss!
@@ -1194,6 +1301,10 @@ class RetroGameController {
     }
 
     update() {
+        if (this.screenShake > 0) {
+            this.screenShake -= 0.8;
+        }
+
         if (this.gameState === 'gameover' || this.gameState === 'victory' || this.gameState === 'levelclear') {
             // Update particles/debris even in post-game
             this.particles.forEach(p => p.update());
@@ -1617,6 +1728,7 @@ class RetroGameController {
         this.player.state = 'hurt';
         this.player.stateTimer = 18; // hurt frames
         this.player.vy = -3; // slight upward bounce
+        this.screenShake = 12;
         gameAudio.playHurt();
 
         if (this.player.health <= 0) {
@@ -1627,6 +1739,13 @@ class RetroGameController {
     }
 
     draw() {
+        this.ctx.save();
+        if (this.screenShake > 0) {
+            const dx = (Math.random() - 0.5) * this.screenShake;
+            const dy = (Math.random() - 0.5) * this.screenShake;
+            this.ctx.translate(dx, dy);
+        }
+
         // Clear screen
         const bgType = this.levelData[this.currentLevel - 1].background;
         if (bgType === 'dojo') {
@@ -1686,12 +1805,52 @@ class RetroGameController {
         } else if (this.gameState === 'levelclear') {
             this.drawLevelClearScreen();
         }
+
+        this.ctx.restore();
     }
 
     // --- Parallax Background Artworks ---
 
     drawParallaxStars() {
         const bgType = this.levelData[this.currentLevel - 1].background;
+        const spriteKey = `bg_${bgType.replace('-', '_')}`;
+        const sprite = this.sprites[spriteKey];
+        
+        if (sprite && sprite.loaded) {
+            const img = sprite.img;
+            const drawH = 480;
+            const drawW = (img.width / img.height) * drawH;
+            const offset = this.scrollOffset * 0.15; // slow parallax scroll
+            let xOffset = -offset % drawW;
+            if (xOffset > 0) xOffset -= drawW;
+            
+            this.ctx.drawImage(img, xOffset, 0, drawW, drawH);
+            this.ctx.drawImage(img, xOffset + drawW, 0, drawW, drawH);
+            if (xOffset + drawW * 2 < 800) {
+                this.ctx.drawImage(img, xOffset + drawW * 2, 0, drawW, drawH);
+            }
+
+            // Draw atmospheric rain for Stage 3: New York Streets
+            if (bgType === 'new-york') {
+                this.ctx.save();
+                this.ctx.strokeStyle = 'rgba(156, 163, 175, 0.25)';
+                this.ctx.lineWidth = 1;
+                const time = performance.now() * 0.002;
+                for (let i = 0; i < 25; i++) {
+                    const rx = (Math.sin(i * 123.45 + time) * 0.5 + 0.5) * 800;
+                    const ry = ((i * 456.78 + time * 200) % 480);
+                    const len = 12 + Math.random() * 18;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(rx, ry);
+                    this.ctx.lineTo(rx - 2, ry + len);
+                    this.ctx.stroke();
+                }
+                this.ctx.restore();
+            }
+
+            return; // Skip vector stars
+        }
+
         if (bgType === 'dojo' || bgType === 'subway') {
             return; // Indoor stage
         }
@@ -1730,6 +1889,12 @@ class RetroGameController {
 
     drawParallaxBuildings() {
         const bgType = this.levelData[this.currentLevel - 1].background;
+        const spriteKey = `bg_${bgType.replace('-', '_')}`;
+        const sprite = this.sprites[spriteKey];
+        
+        if (sprite && sprite.loaded) {
+            return; // Background already drawn in drawParallaxStars
+        }
         
         if (bgType === 'dojo') {
             // Draw Shoji screens sliding behind
@@ -2137,45 +2302,110 @@ class RetroGameController {
 
     drawCraig() {
         const p = this.player;
-        this.ctx.save();
-        this.ctx.translate(p.x, p.y);
+        let sprite = null;
+        if (p.state === 'idle') sprite = this.sprites.craig_idle;
+        else if (p.state === 'walking') sprite = this.sprites.craig_walk;
+        else if (p.state === 'jumping') sprite = this.sprites.craig_jump;
+        else if (p.state === 'ducking') sprite = this.sprites.craig_crouch;
+        else if (p.state === 'attacking') {
+            sprite = (p.attackType === 'kick') ? this.sprites.craig_kick : this.sprites.craig_punch;
+        }
+        else if (p.state === 'hurt') sprite = this.sprites.craig_hurt;
+        else if (p.state === 'victory') sprite = this.sprites.craig_victory;
         
-        // Squish character if ducking (height shrinks from 75 to 45)
+        if (sprite && sprite.loaded) {
+            this.ctx.save();
+            const feetX = p.x + p.width / 2;
+            const feetY = p.y + p.height;
+            this.ctx.translate(feetX, feetY);
+            if (p.facing === -1) {
+                this.ctx.scale(-1, 1);
+            }
+            if (p.state === 'hurt') {
+                this.ctx.translate((Math.random() - 0.5) * 8, 0);
+            }
+            
+            // Draw aura glow effect behind Craig
+            this.ctx.save();
+            this.ctx.globalCompositeOperation = 'screen';
+            this.ctx.shadowColor = '#a855f7';
+            this.ctx.shadowBlur = 15;
+            this.ctx.globalAlpha = 0.35 + Math.sin(performance.now() * 0.006) * 0.15;
+            this.ctx.drawImage(sprite.canvas, -60, -115, 120, 120);
+            this.ctx.restore();
+            
+            // Draw character
+            this.ctx.drawImage(sprite.canvas, -55, -110, 110, 110);
+            this.ctx.restore();
+        } else {
+            this.drawCraigVector();
+        }
+    }
+
+    drawCraigVector() {
+        const p = this.player;
+        this.ctx.save();
+        
+        // Align feet:
+        // Standing: bounding box is height 75. Drawing is height 110. Top Y offset is -35.
+        // Crouching: bounding box is height 45. Drawing is height 110. Top Y offset is -21.
+        const drawX = p.x - 15;
+        const drawY = p.isDucking ? (p.y - 21) : (p.y - 35);
+        
+        this.ctx.translate(drawX, drawY);
+        
+        // Flip character rendering depending on facing direction
+        if (p.facing === -1) {
+            this.ctx.scale(-1, 1);
+            this.ctx.translate(-75, 0); // width of drawing is 75
+        }
+        
         if (p.isDucking) {
             this.ctx.scale(1, 0.6);
         }
-        
+
         // Apply sprite shaking if hurt
         if (p.state === 'hurt') {
             this.ctx.translate((Math.random() - 0.5) * 8, 0);
         }
 
-        // Flip character rendering depending on facing direction
-        if (p.facing === -1) {
-            this.ctx.scale(-1, 1);
-            this.ctx.translate(-p.width, 0);
-        }
-
         // Muscular Tanned skin color & Saffron Robe colors (premium realistic 3D gradients)
-        const skinShadow = '#612a1c';
+        const skinShadow = '#541c0e';
         const skinHighlight = '#ffdfd3';
         const skinMid = '#cf7a5c';
         
-        const skinGrad = this.ctx.createLinearGradient(0, 20, 45, 52);
+        const skinGrad = this.ctx.createLinearGradient(10, 20, 65, 80);
         skinGrad.addColorStop(0, skinHighlight);
         skinGrad.addColorStop(0.5, skinMid);
         skinGrad.addColorStop(1, skinShadow);
 
-        // Saffron fabric gradient
-        const saffronGrad = this.ctx.createLinearGradient(4, 20, 41, 52);
-        saffronGrad.addColorStop(0, '#d97332'); // Saffron highlight
-        saffronGrad.addColorStop(0.6, '#a24a15'); // Saffron mid
-        saffronGrad.addColorStop(1, '#672905'); // Saffron shadow
+        const saffronGrad = this.ctx.createLinearGradient(20, 20, 65, 80);
+        saffronGrad.addColorStop(0, '#f97316'); // bright orange
+        saffronGrad.addColorStop(0.5, '#c2410c'); // darker orange
+        saffronGrad.addColorStop(1, '#7c2d12'); // shadow deep red-brown
         
         const wrapColor = '#ffb703';
         const bootColor = '#2b2d42';
 
-        // 1. Legs (Taller realistic legs)
+        // 1. Draw Dark Arts Aura (glowing purple fires behind Craig)
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.35 + Math.sin(performance.now() * 0.005) * 0.15;
+        this.ctx.shadowColor = '#a855f7'; // purple glow
+        this.ctx.shadowBlur = 18;
+        this.ctx.fillStyle = 'rgba(168, 85, 247, 0.22)';
+        
+        const time = performance.now() * 0.003;
+        for (let i = 0; i < 6; i++) {
+            const fx = 37 + Math.sin(time + i * 1.5) * 22;
+            const fy = 65 - i * 14 + Math.cos(time * 0.7 + i) * 12;
+            const r = 16 + Math.sin(time * 1.2 + i) * 6;
+            this.ctx.beginPath();
+            this.ctx.arc(fx, fy, r, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+        this.ctx.restore();
+
+        // 2. Legs (orange baggy monk pants)
         this.ctx.fillStyle = saffronGrad;
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 3.5;
@@ -2184,386 +2414,402 @@ class RetroGameController {
         if (p.state === 'walking') {
             legOffset = Math.sin(performance.now() * 0.015) * 8;
         }
-
-        // Left leg (back)
+        
+        // Left Leg (back)
         this.ctx.beginPath();
-        this.ctx.moveTo(11 + legOffset, 48);
-        this.ctx.lineTo(21 + legOffset, 48);
-        this.ctx.lineTo(20 + legOffset, 72);
-        this.ctx.lineTo(12 + legOffset, 72);
+        this.ctx.moveTo(25 + legOffset, 70);
+        this.ctx.quadraticCurveTo(15 + legOffset, 80, 22 + legOffset, 100);
+        this.ctx.lineTo(34 + legOffset, 100);
+        this.ctx.quadraticCurveTo(38 + legOffset, 80, 37 + legOffset, 70);
         this.ctx.closePath();
         this.ctx.fill(); this.ctx.stroke();
 
-        // Right leg (front)
+        // Right Leg (front)
         this.ctx.beginPath();
-        this.ctx.moveTo(23 - legOffset, 48);
-        this.ctx.lineTo(33 - legOffset, 48);
-        this.ctx.lineTo(34 - legOffset, 72);
-        this.ctx.lineTo(24 - legOffset, 72);
+        this.ctx.moveTo(38 - legOffset, 70);
+        this.ctx.quadraticCurveTo(37 - legOffset, 80, 42 - legOffset, 100);
+        this.ctx.lineTo(54 - legOffset, 100);
+        this.ctx.quadraticCurveTo(62 - legOffset, 80, 52 - legOffset, 70);
         this.ctx.closePath();
         this.ctx.fill(); this.ctx.stroke();
 
-        // Leg wraps (gold wraps on shins)
+        // 3. Gold Shin Wraps
         this.ctx.fillStyle = wrapColor;
         this.ctx.beginPath();
-        this.ctx.moveTo(12 + legOffset, 60);
-        this.ctx.lineTo(20 + legOffset, 60);
-        this.ctx.lineTo(20 + legOffset, 71);
-        this.ctx.lineTo(12 + legOffset, 71);
+        this.ctx.moveTo(22 + legOffset, 90);
+        this.ctx.lineTo(34 + legOffset, 90);
+        this.ctx.lineTo(33 + legOffset, 103);
+        this.ctx.lineTo(23 + legOffset, 103);
         this.ctx.closePath();
         this.ctx.fill(); this.ctx.stroke();
 
         this.ctx.beginPath();
-        this.ctx.moveTo(24 - legOffset, 60);
-        this.ctx.lineTo(34 - legOffset, 60);
-        this.ctx.lineTo(34 - legOffset, 71);
-        this.ctx.lineTo(24 - legOffset, 71);
+        this.ctx.moveTo(42 - legOffset, 90);
+        this.ctx.lineTo(54 - legOffset, 90);
+        this.ctx.lineTo(53 - legOffset, 103);
+        this.ctx.lineTo(43 - legOffset, 103);
         this.ctx.closePath();
         this.ctx.fill(); this.ctx.stroke();
-        
-        // Wrap lines detail
+
+        // wrap strap lines detail
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 1.5;
         this.ctx.beginPath();
-        this.ctx.moveTo(12 + legOffset, 64); this.ctx.lineTo(20 + legOffset, 64);
-        this.ctx.moveTo(12 + legOffset, 68); this.ctx.lineTo(20 + legOffset, 68);
-        this.ctx.moveTo(24 - legOffset, 64); this.ctx.lineTo(34 - legOffset, 64);
-        this.ctx.moveTo(24 - legOffset, 68); this.ctx.lineTo(34 - legOffset, 68);
+        this.ctx.moveTo(22 + legOffset, 94); this.ctx.lineTo(34 + legOffset, 94);
+        this.ctx.moveTo(23 + legOffset, 98); this.ctx.lineTo(33 + legOffset, 98);
+        this.ctx.moveTo(42 - legOffset, 94); this.ctx.lineTo(54 - legOffset, 94);
+        this.ctx.moveTo(43 - legOffset, 98); this.ctx.lineTo(53 - legOffset, 98);
         this.ctx.stroke();
 
-        // Shoes
+        // 4. Shoes
         this.ctx.fillStyle = bootColor;
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 3.5;
         this.ctx.beginPath();
-        this.ctx.roundRect(10 + legOffset, 70, 12, 6, [2]);
-        this.ctx.roundRect(22 - legOffset, 70, 13, 6, [2]);
+        this.ctx.roundRect(20 + legOffset, 102, 16, 7, [2]);
+        this.ctx.roundRect(40 - legOffset, 102, 16, 7, [2]);
         this.ctx.fill(); this.ctx.stroke();
 
-        // 2. Back Arm (left - bare skin muscular, if not punching/attacking)
+        // 5. Back Arm (Bare Skin, Muscular, Vascular)
         if (p.state !== 'attacking') {
             this.ctx.fillStyle = skinGrad;
             this.ctx.strokeStyle = '#000';
             this.ctx.lineWidth = 3.5;
             
-            // Continuous muscle arm path (eliminates stacked circles)
             this.ctx.beginPath();
-            this.ctx.moveTo(13, 20); // Shoulder top
-            this.ctx.quadraticCurveTo(2, 22, 1, 30); // Deltoid/bicep curve
-            this.ctx.quadraticCurveTo(0, 38, 3, 41); // Forearm bulge
-            this.ctx.lineTo(8, 41);
-            this.ctx.quadraticCurveTo(11, 36, 10, 29); // Inner forearm
-            this.ctx.lineTo(13, 26);
+            this.ctx.moveTo(22, 28); // Shoulder top
+            this.ctx.quadraticCurveTo(8, 30, 7, 44); // Deltoid/bicep outer bulge
+            this.ctx.quadraticCurveTo(5, 56, 10, 62); // Forearm outer bulge
+            this.ctx.lineTo(18, 62); // Wrist bottom
+            this.ctx.quadraticCurveTo(20, 52, 18, 42); // Inner forearm
+            this.ctx.lineTo(24, 38); // Armpit
             this.ctx.closePath();
-            this.ctx.fill();
-            this.ctx.stroke();
+            this.ctx.fill(); this.ctx.stroke();
 
-            // Fist Lobe
+            // Fist
             this.ctx.beginPath();
-            this.ctx.arc(5, 42, 4.5, 0, Math.PI * 2);
-            this.ctx.fill();
-            this.ctx.stroke();
+            this.ctx.arc(14, 65, 7.5, 0, Math.PI * 2);
+            this.ctx.fill(); this.ctx.stroke();
 
-            // Vein on bicep
-            this.ctx.strokeStyle = '#6b8e8f';
-            this.ctx.lineWidth = 1.2;
+            // Bulging veins
+            this.ctx.strokeStyle = '#38bdf8'; // light blue glowing veins
+            this.ctx.lineWidth = 1.5;
             this.ctx.beginPath();
-            this.ctx.moveTo(9, 21); this.ctx.quadraticCurveTo(7, 30, 5, 39);
+            this.ctx.moveTo(15, 32); this.ctx.quadraticCurveTo(11, 44, 13, 56);
             this.ctx.stroke();
         }
 
-        // 3. Torso (Bare chest on left, saffron robe covering right chest diagonally)
+        // 6. Torso (Sculpted Chest & Diagonally Torn Robe)
         this.ctx.fillStyle = skinGrad;
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 3.5;
         this.ctx.beginPath();
-        this.ctx.roundRect(10, 18, 24, 28, [4]);
-        this.ctx.fill();
-        this.ctx.stroke();
+        this.ctx.roundRect(20, 26, 36, 44, [4]);
+        this.ctx.fill(); this.ctx.stroke();
 
-        // Chest muscles shading (sculpted pecs / abs)
-        this.ctx.fillStyle = 'rgba(84, 28, 14, 0.15)';
+        // Pecs and abs definitions
+        this.ctx.fillStyle = 'rgba(84, 28, 14, 0.2)';
         this.ctx.beginPath();
-        // Pec shadow (left side - bare skin)
-        this.ctx.moveTo(22, 24);
-        this.ctx.quadraticCurveTo(17, 28, 11, 24);
-        this.ctx.lineTo(11, 29);
-        this.ctx.quadraticCurveTo(17, 29, 22, 28);
+        // Left pec shadow (bare skin side)
+        this.ctx.moveTo(37, 34);
+        this.ctx.quadraticCurveTo(28, 38, 22, 34);
+        this.ctx.lineTo(22, 40);
+        this.ctx.quadraticCurveTo(28, 40, 37, 39);
         this.ctx.closePath();
         this.ctx.fill();
 
-        this.ctx.strokeStyle = '#541c0e'; // Deep shadow line
-        this.ctx.lineWidth = 2.2;
+        this.ctx.strokeStyle = '#541c0e';
+        this.ctx.lineWidth = 2.5;
         this.ctx.beginPath();
         // Sternum line
-        this.ctx.moveTo(22, 22); this.ctx.lineTo(22, 42);
+        this.ctx.moveTo(37, 32); this.ctx.lineTo(37, 65);
         // Pec border
-        this.ctx.moveTo(11, 24); this.ctx.quadraticCurveTo(17, 28, 22, 28);
-        // Abs definition lines
-        this.ctx.moveTo(13, 33); this.ctx.quadraticCurveTo(17, 34, 22, 33);
-        this.ctx.moveTo(14, 38); this.ctx.quadraticCurveTo(17, 39, 22, 38);
+        this.ctx.moveTo(22, 34); this.ctx.quadraticCurveTo(28, 38, 37, 38);
+        // 6-pack abs lines
+        this.ctx.moveTo(24, 48); this.ctx.quadraticCurveTo(30, 49, 37, 48);
+        this.ctx.moveTo(24, 54); this.ctx.quadraticCurveTo(30, 55, 37, 54);
+        this.ctx.moveTo(24, 60); this.ctx.quadraticCurveTo(30, 61, 37, 60);
         this.ctx.stroke();
         
-        // Battle scar on bare chest
-        this.ctx.strokeStyle = '#b31a1a';
-        this.ctx.lineWidth = 1.5;
+        // Battle scar on chest
+        this.ctx.strokeStyle = '#b91c1c';
+        this.ctx.lineWidth = 1.8;
         this.ctx.beginPath();
-        this.ctx.moveTo(13, 20); this.ctx.lineTo(18, 25);
-        this.ctx.moveTo(15, 24); this.ctx.lineTo(17, 21);
+        this.ctx.moveTo(24, 30); this.ctx.lineTo(31, 37);
+        this.ctx.moveTo(27, 36); this.ctx.lineTo(30, 32);
         this.ctx.stroke();
 
-        // Jagged saffron robe covering right side of chest (our right)
+        // Jagged saffron robe diagonally covering right chest
         this.ctx.fillStyle = saffronGrad;
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 3.5;
         this.ctx.beginPath();
-        this.ctx.moveTo(34, 18);
-        this.ctx.lineTo(22, 18);
-        this.ctx.lineTo(24, 22); // Jagged tear
-        this.ctx.lineTo(19, 27);
-        this.ctx.lineTo(23, 32);
-        this.ctx.lineTo(18, 38);
-        this.ctx.lineTo(22, 46);
-        this.ctx.lineTo(34, 46);
+        this.ctx.moveTo(56, 26);
+        this.ctx.lineTo(37, 26);
+        this.ctx.lineTo(40, 32); // Torn jag
+        this.ctx.lineTo(34, 38);
+        this.ctx.lineTo(41, 45);
+        this.ctx.lineTo(33, 53);
+        this.ctx.lineTo(38, 62);
+        this.ctx.lineTo(56, 62);
         this.ctx.closePath();
-        this.ctx.fill();
-        this.ctx.stroke();
+        this.ctx.fill(); this.ctx.stroke();
 
         // Creases on saffron robe fabric
-        this.ctx.strokeStyle = '#672905';
-        this.ctx.lineWidth = 1.5;
+        this.ctx.strokeStyle = '#7c2d12';
+        this.ctx.lineWidth = 1.8;
         this.ctx.beginPath();
-        this.ctx.moveTo(31, 20); this.ctx.lineTo(26, 30);
-        this.ctx.moveTo(33, 28); this.ctx.lineTo(29, 38);
+        this.ctx.moveTo(51, 29); this.ctx.lineTo(44, 42);
+        this.ctx.moveTo(53, 40); this.ctx.lineTo(46, 55);
         this.ctx.stroke();
 
         // Waist Sash (Black belt)
-        this.ctx.fillStyle = '#111';
+        this.ctx.fillStyle = '#111827';
         this.ctx.strokeStyle = '#000';
-        this.ctx.lineWidth = 3;
+        this.ctx.lineWidth = 3.5;
         this.ctx.beginPath();
-        this.ctx.roundRect(8, 44, 28, 6, [2]);
-        this.ctx.fill();
-        this.ctx.stroke();
+        this.ctx.roundRect(17, 63, 41, 9, [2]);
+        this.ctx.fill(); this.ctx.stroke();
         
         // Sash tails
         this.ctx.beginPath();
-        this.ctx.moveTo(15, 50); this.ctx.lineTo(13, 62); this.ctx.lineTo(10, 61); this.ctx.lineTo(12, 50);
-        this.ctx.moveTo(18, 50); this.ctx.lineTo(19, 66); this.ctx.lineTo(16, 65); this.ctx.lineTo(15, 50);
+        this.ctx.moveTo(27, 72); this.ctx.lineTo(24, 88); this.ctx.lineTo(20, 87); this.ctx.lineTo(23, 72);
+        this.ctx.moveTo(32, 72); this.ctx.lineTo(33, 93); this.ctx.lineTo(28, 91); this.ctx.lineTo(29, 72);
         this.ctx.closePath();
-        this.ctx.fill();
-        this.ctx.stroke();
+        this.ctx.fill(); this.ctx.stroke();
 
-        // 4. Front Arm / Attack (front - right sleeved arm, unless attacking)
+        // 7. Front Arm (Vibrant Saffron Sleeve)
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 3.5;
         
         if (p.state === 'attacking') {
             if (p.attackType === 'punch') {
-                // Punching bare arm (throws back bare arm forward as right cross!)
-                // Deltoid to fist extending to the right in a continuous contour path
-                const armGrad = this.ctx.createLinearGradient(20, 24, 60, 24);
+                // Massive bare punching arm extending forward
+                const armGrad = this.ctx.createLinearGradient(35, 34, 85, 34);
                 armGrad.addColorStop(0, skinHighlight);
                 armGrad.addColorStop(0.5, skinMid);
                 armGrad.addColorStop(1, skinShadow);
                 this.ctx.fillStyle = armGrad;
 
-                // Continuous punching arm path (no stacked balls)
                 this.ctx.beginPath();
-                this.ctx.moveTo(22, 18); // Shoulder top
-                this.ctx.quadraticCurveTo(34, 16, 48, 19); // Top edge
-                this.ctx.lineTo(52, 21); // Wrist top
-                this.ctx.lineTo(52, 27); // Wrist bottom
-                this.ctx.quadraticCurveTo(36, 29, 22, 28); // Underarm/elbow
-                this.ctx.closePath();
-                this.ctx.fill();
-                this.ctx.stroke();
-
-                // Fist
-                this.ctx.beginPath();
-                this.ctx.arc(56, 24, 6.5, 0, Math.PI * 2);
-                this.ctx.fill(); this.ctx.stroke();
-
-                // Bulging green veins
-                this.ctx.strokeStyle = '#6b8e8f';
-                this.ctx.lineWidth = 1.5;
-                this.ctx.beginPath();
-                this.ctx.moveTo(25, 20); this.ctx.bezierCurveTo(32, 18, 38, 22, 45, 21);
-                this.ctx.stroke();
-
-                // Muscle definition
-                this.ctx.strokeStyle = '#541c0e';
-                this.ctx.lineWidth = 2.2;
-                this.ctx.beginPath();
-                this.ctx.moveTo(27, 27); this.ctx.lineTo(40, 27);
-                this.ctx.stroke();
-
-                // Draw front sleeved arm pulled back to chest as guard (bent elbow)
-                this.ctx.fillStyle = saffronGrad;
-                this.ctx.strokeStyle = '#000';
-                this.ctx.beginPath();
-                this.ctx.moveTo(22, 20); // Shoulder
-                this.ctx.lineTo(13, 26); // Upper arm
-                this.ctx.lineTo(17, 34); // Forearm
-                this.ctx.lineTo(21, 30); // Inner fold
+                this.ctx.moveTo(37, 26); // Shoulder top
+                this.ctx.quadraticCurveTo(55, 23, 75, 27); // Top arm line
+                this.ctx.lineTo(82, 30); // Wrist top
+                this.ctx.lineTo(82, 38); // Wrist bottom
+                this.ctx.quadraticCurveTo(57, 41, 37, 39); // Underarm
                 this.ctx.closePath();
                 this.ctx.fill(); this.ctx.stroke();
-                
-                // Fist
+
+                // Punching fist
                 this.ctx.fillStyle = skinGrad;
                 this.ctx.beginPath();
-                this.ctx.arc(17, 34, 4.5, 0, Math.PI * 2);
+                this.ctx.arc(87, 34, 8.5, 0, Math.PI * 2);
                 this.ctx.fill(); this.ctx.stroke();
-            } else {
-                // Kick sweep pants leg (rich saffron terracotta)
+
+                // Vascular blue veins on punch arm
+                this.ctx.strokeStyle = '#38bdf8';
+                this.ctx.lineWidth = 1.8;
+                this.ctx.beginPath();
+                this.ctx.moveTo(41, 28); this.ctx.bezierCurveTo(52, 25, 62, 31, 74, 30);
+                this.ctx.stroke();
+
+                // Pull back guard sleeve
                 this.ctx.fillStyle = saffronGrad;
                 this.ctx.beginPath();
-                this.ctx.roundRect(22, 36, 38, 12, [4]);
-                this.ctx.fill();
-                this.ctx.stroke();
+                this.ctx.moveTo(37, 30);
+                this.ctx.lineTo(24, 38);
+                this.ctx.lineTo(29, 48);
+                this.ctx.lineTo(37, 42);
+                this.ctx.closePath();
+                this.ctx.fill(); this.ctx.stroke();
+
+                this.ctx.fillStyle = skinGrad;
+                this.ctx.beginPath();
+                this.ctx.arc(29, 48, 6.5, 0, Math.PI * 2);
+                this.ctx.fill(); this.ctx.stroke();
+            } else {
+                // Kick sweep (orange leg extension)
+                this.ctx.fillStyle = saffronGrad;
+                this.ctx.beginPath();
+                this.ctx.roundRect(37, 50, 48, 16, [4]);
+                this.ctx.fill(); this.ctx.stroke();
                 
                 this.ctx.fillStyle = bootColor;
                 this.ctx.beginPath();
-                this.ctx.roundRect(60, 35, 7, 14, [3]);
-                this.ctx.fill();
-                this.ctx.stroke();
+                this.ctx.roundRect(85, 48, 9, 20, [3]);
+                this.ctx.fill(); this.ctx.stroke();
             }
         } else {
-            // Idle front arm (sleeved in saffron terracotta) - smooth drape path
+            // Idle sleeved arm draping down
             this.ctx.fillStyle = saffronGrad;
-            
             this.ctx.beginPath();
-            this.ctx.moveTo(27, 20); // Neck/shoulder joint
-            this.ctx.quadraticCurveTo(39, 18, 41, 26); // Outer deltoid
-            this.ctx.quadraticCurveTo(43, 33, 40, 37); // Sleeve drape down
-            this.ctx.lineTo(32, 38);
-            this.ctx.quadraticCurveTo(28, 30, 27, 24); // Inner armpit
+            this.ctx.moveTo(41, 26);
+            this.ctx.quadraticCurveTo(57, 24, 60, 34); // Outer bicep
+            this.ctx.quadraticCurveTo(62, 45, 57, 51); // Sleeve drape down
+            this.ctx.lineTo(46, 52); // Cuff bottom
+            this.ctx.quadraticCurveTo(42, 41, 41, 32); // Inner arm
             this.ctx.closePath();
             this.ctx.fill(); this.ctx.stroke();
             
-            // Cuff ellipse
+            // Cuff outline
             this.ctx.beginPath();
-            this.ctx.ellipse(36, 37.5, 4, 1.5, 0, 0, Math.PI * 2);
+            this.ctx.ellipse(51, 51.5, 5.5, 2, 0, 0, Math.PI * 2);
             this.ctx.stroke();
 
-            // Hand (bare skin) sticking out
+            // Hand sticking out
             this.ctx.fillStyle = skinGrad;
             this.ctx.beginPath();
-            this.ctx.arc(36, 42, 4.5, 0, Math.PI * 2); // Fist
+            this.ctx.arc(51, 58, 6.5, 0, Math.PI * 2);
             this.ctx.fill(); this.ctx.stroke();
         }
 
-        // 5. Head & Face (Tapered oval shape, realistic features, scar under right eye)
-        const headGrad = this.ctx.createRadialGradient(20, 6, 2, 22, 10, 10);
+        // 8. Head & Face (Hyper-detailed, Scar, Glowing Red Eyes)
+        const headGrad = this.ctx.createRadialGradient(37, 10, 2, 37, 14, 14);
         headGrad.addColorStop(0, skinHighlight);
         headGrad.addColorStop(0.5, skinMid);
         headGrad.addColorStop(1, skinShadow);
-        
-        // Shaded ears (smaller realistic lobes)
+
+        // Ears
         this.ctx.fillStyle = headGrad;
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 3.5;
         this.ctx.beginPath();
-        this.ctx.ellipse(14.5, 9.5, 1.5, 2.5, Math.PI / 10, 0, Math.PI * 2);
-        this.ctx.ellipse(29.5, 9.5, 1.5, 2.5, -Math.PI / 10, 0, Math.PI * 2);
+        this.ctx.ellipse(29, 14, 2, 3.5, Math.PI / 10, 0, Math.PI * 2);
+        this.ctx.ellipse(45, 14, 2, 3.5, -Math.PI / 10, 0, Math.PI * 2);
         this.ctx.fill(); this.ctx.stroke();
-        
-        // Tapered oval head shape
+
+        // Skull & Jawline (realistic tapered contour)
         this.ctx.beginPath();
-        this.ctx.moveTo(16, 7);
-        this.ctx.quadraticCurveTo(22, 1, 28, 7); // Skull cap
-        this.ctx.quadraticCurveTo(29, 14, 25, 17); // Right jaw
-        this.ctx.lineTo(19, 17); // Chin
-        this.ctx.quadraticCurveTo(15, 14, 16, 7); // Left jaw
+        this.ctx.moveTo(31, 10);
+        this.ctx.quadraticCurveTo(37, 2, 43, 10); // Skull
+        this.ctx.quadraticCurveTo(45, 20, 41, 24); // Right jaw
+        this.ctx.lineTo(33, 24); // Chin
+        this.ctx.quadraticCurveTo(29, 20, 31, 10); // Left jaw
         this.ctx.closePath();
-        this.ctx.fill();
+        this.ctx.fill(); this.ctx.stroke();
+
+        // Neck
+        this.ctx.fillStyle = headGrad;
+        this.ctx.beginPath();
+        this.ctx.moveTo(33, 22);
+        this.ctx.lineTo(33, 30);
+        this.ctx.lineTo(41, 30);
+        this.ctx.lineTo(41, 22);
+        this.ctx.closePath();
+        this.ctx.fill(); this.ctx.stroke();
+
+        // Neck muscles shading lines
+        this.ctx.strokeStyle = '#541c0e';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(34, 24); this.ctx.lineTo(34, 29);
+        this.ctx.moveTo(40, 24); this.ctx.lineTo(40, 29);
         this.ctx.stroke();
 
-        // Face details
-        if (p.state === 'hurt') {
-            this.ctx.fillStyle = '#000';
-            this.ctx.font = 'bold 8px Courier';
-            this.ctx.fillText('x', 18, 10);
-            this.ctx.fillText('x', 24, 10);
-            
-            this.ctx.strokeStyle = '#000';
-            this.ctx.lineWidth = 1.5;
-            this.ctx.beginPath();
-            this.ctx.moveTo(19, 14); this.ctx.lineTo(25, 14);
-            this.ctx.stroke();
-        } else {
-            // Angry slanted white eyes
-            this.ctx.fillStyle = '#fff';
-            this.ctx.strokeStyle = '#000';
-            this.ctx.lineWidth = 1.2;
-            
-            // Left eye
-            this.ctx.beginPath();
-            this.ctx.moveTo(16, 10); this.ctx.lineTo(20, 11); this.ctx.lineTo(19, 8);
-            this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke();
+        // Frowning Slanted Angry Glowing Eyes
+        this.ctx.fillStyle = '#fff';
+        this.ctx.strokeStyle = '#b91c1c'; // red outline
+        this.ctx.lineWidth = 1.5;
+        
+        // Left eye
+        this.ctx.beginPath();
+        this.ctx.moveTo(31.5, 14); this.ctx.lineTo(36.5, 15); this.ctx.lineTo(35, 12);
+        this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke();
 
-            // Right eye
-            this.ctx.beginPath();
-            this.ctx.moveTo(28, 10); this.ctx.lineTo(24, 11); this.ctx.lineTo(25, 8);
-            this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke();
+        // Right eye
+        this.ctx.beginPath();
+        this.ctx.moveTo(42.5, 14); this.ctx.lineTo(37.5, 15); this.ctx.lineTo(39, 12);
+        this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke();
 
-            // Pupils
-            this.ctx.fillStyle = '#000';
-            this.ctx.beginPath();
-            this.ctx.arc(18, 10, 0.8, 0, Math.PI * 2);
-            this.ctx.arc(26, 10, 0.8, 0, Math.PI * 2);
-            this.ctx.fill();
+        // Red pupils (Dark arts red eye glow)
+        this.ctx.fillStyle = '#b91c1c';
+        this.ctx.beginPath();
+        this.ctx.arc(34, 14, 1.2, 0, Math.PI * 2);
+        this.ctx.arc(40, 14, 1.2, 0, Math.PI * 2);
+        this.ctx.fill();
 
-            // Thick angry eyebrows
-            this.ctx.strokeStyle = '#000';
-            this.ctx.lineWidth = 2.2;
-            this.ctx.beginPath();
-            this.ctx.moveTo(14, 7); this.ctx.lineTo(20, 9);
-            this.ctx.moveTo(30, 7); this.ctx.lineTo(24, 9);
-            this.ctx.stroke();
+        // Thick angry eyebrows
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 2.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(29, 10); this.ctx.lineTo(36.5, 13);
+        this.ctx.moveTo(45, 10); this.ctx.lineTo(37.5, 13);
+        this.ctx.stroke();
 
-            // Brow shadow line
-            this.ctx.strokeStyle = 'rgba(84, 28, 14, 0.4)';
-            this.ctx.lineWidth = 1.2;
-            this.ctx.beginPath();
-            this.ctx.moveTo(16, 9.5); this.ctx.lineTo(28, 9.5);
-            this.ctx.stroke();
+        // Nose
+        this.ctx.strokeStyle = '#541c0e';
+        this.ctx.lineWidth = 1.8;
+        this.ctx.beginPath();
+        this.ctx.moveTo(37, 13); this.ctx.lineTo(35.5, 17.5); this.ctx.lineTo(38.5, 17.5);
+        this.ctx.stroke();
 
-            // Shaded nose
-            this.ctx.strokeStyle = '#541c0e';
-            this.ctx.lineWidth = 1.5;
-            this.ctx.beginPath();
-            this.ctx.moveTo(22, 9.5); this.ctx.lineTo(21, 12); this.ctx.lineTo(23, 12);
-            this.ctx.stroke();
+        // Cheek scar under right eye (our right)
+        this.ctx.strokeStyle = '#dc2626';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(41.5, 16.5); this.ctx.lineTo(43, 20.5);
+        this.ctx.stroke();
 
-            // Vertical eye scar under right eye (our right, Craig's left)
-            this.ctx.strokeStyle = '#b31a1a';
-            this.ctx.lineWidth = 1.2;
-            this.ctx.beginPath();
-            this.ctx.moveTo(26, 12); this.ctx.lineTo(27, 15);
-            this.ctx.stroke();
+        // Open gritting teeth mouth
+        this.ctx.fillStyle = '#450a0a'; // blood-dark mouth interior
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.roundRect(32, 19, 10, 4, [1]);
+        this.ctx.fill(); this.ctx.stroke();
 
-            // Open gritting teeth mouth (smooth shape, not barcode)
-            this.ctx.fillStyle = '#4a121a'; // dark red mouth interior
-            this.ctx.strokeStyle = '#000';
-            this.ctx.lineWidth = 1.8;
-            this.ctx.beginPath();
-            this.ctx.roundRect(17, 13.5, 10, 3.5, [1]);
-            this.ctx.fill();
-            this.ctx.stroke();
+        // Teeth line
+        this.ctx.strokeStyle = '#ffffff';
+        this.ctx.lineWidth = 1.2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(32.5, 21); this.ctx.lineTo(41.5, 21);
+        this.ctx.stroke();
 
-            // Teeth line
-            this.ctx.strokeStyle = '#ffffff';
-            this.ctx.lineWidth = 1;
-            this.ctx.beginPath();
-            this.ctx.moveTo(17.5, 15.2); this.ctx.lineTo(26.5, 15.2);
-            this.ctx.stroke();
+        // 9. Hands glowing purple energy sparks overlay
+        let bhX = 14, bhY = 65; // back hand
+        let fhX = 51, fhY = 58; // front hand
+        
+        if (p.state === 'attacking') {
+            if (p.attackType === 'punch') {
+                bhX = 29; bhY = 48;
+                fhX = 87; fhY = 34;
+            }
         }
+        
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.55 + Math.sin(performance.now() * 0.008) * 0.2;
+        this.ctx.fillStyle = '#a855f7';
+        this.ctx.shadowColor = '#ec4899';
+        this.ctx.shadowBlur = 12;
+        
+        this.ctx.beginPath();
+        this.ctx.arc(bhX, bhY, 8, 0, Math.PI * 2);
+        this.ctx.arc(fhX, fhY, 8, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.restore();
 
         this.ctx.restore();
     }
 
     drawThug(thug) {
+        const feetX = thug.x - this.scrollOffset + thug.width / 2;
+        const feetY = thug.y + thug.height;
+        const sprite = (thug.style === 0 || thug.style === 2) ? this.sprites.thug_afro : this.sprites.thug_leather;
+        
+        if (sprite && sprite.loaded) {
+            this.ctx.save();
+            this.ctx.translate(feetX, feetY);
+            if (thug.facing === 1) {
+                this.ctx.scale(-1, 1);
+            }
+            this.ctx.drawImage(sprite.canvas, -55, -110, 110, 110);
+            this.ctx.restore();
+        } else {
+            this.drawThugVector(thug);
+        }
+    }
+
+    drawThugVector(thug) {
         this.ctx.save();
         this.ctx.translate(thug.x - this.scrollOffset, thug.y);
 
@@ -2883,6 +3129,38 @@ class RetroGameController {
 
     drawBoss() {
         const b = this.boss;
+        const feetX = b.x - this.scrollOffset + b.width / 2;
+        const feetY = b.y + b.height;
+        let sprite = null;
+        if (b.bossStyle === 'elder') sprite = this.sprites.boss_sensei;
+        else if (b.bossStyle === 'leather-red') sprite = this.sprites.boss_slasher;
+        else if (b.bossStyle === 'vigilante-clone') sprite = this.sprites.craig_idle;
+        else if (b.bossStyle === 'dark-master') sprite = this.sprites.craig_victory;
+        
+        if (sprite && sprite.loaded) {
+            this.ctx.save();
+            this.ctx.translate(feetX, feetY);
+            if (b.facing === 1) {
+                this.ctx.scale(-1, 1);
+            }
+            if (b.flashTimer > 0 && Math.floor(b.flashTimer / 2) % 2 === 0) {
+                this.ctx.save();
+                this.ctx.drawImage(sprite.canvas, -60, -120, 120, 120);
+                this.ctx.globalCompositeOperation = 'source-atop';
+                this.ctx.fillStyle = 'rgba(230, 57, 70, 0.6)';
+                this.ctx.fillRect(-60, -120, 120, 120);
+                this.ctx.restore();
+            } else {
+                this.ctx.drawImage(sprite.canvas, -60, -120, 120, 120);
+            }
+            this.ctx.restore();
+        } else {
+            this.drawBossVector();
+        }
+    }
+
+    drawBossVector() {
+        const b = this.boss;
         this.ctx.save();
         this.ctx.translate(b.x - this.scrollOffset, b.y);
 
@@ -2945,51 +3223,146 @@ class RetroGameController {
     drawHUD() {
         this.ctx.save();
 
-        // Score Panel
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.font = '800 16px "Outfit", sans-serif';
-        this.ctx.fillText(`SCORE: ${this.player.score}`, 25, 30);
-
-        // Level Progress indicator
-        this.ctx.fillStyle = 'rgba(255,255,255,0.1)';
-        this.ctx.fillRect(25, 45, 180, 8);
-        this.ctx.fillStyle = '#00b4d8';
-        this.ctx.fillRect(25, 45, 180 * this.gameProgress, 8);
-        this.ctx.fillStyle = '#fff';
-        this.ctx.font = '500 10px "Outfit", sans-serif';
-        this.ctx.fillText(`${this.levelData[this.currentLevel - 1].name.toUpperCase()} PROGRESS`, 25, 65);
-
-        // Knives inventory counter
-        this.ctx.fillStyle = '#ffb703';
-        this.ctx.font = '800 15px "Outfit", sans-serif';
-        this.ctx.fillText(`🗡️ x ${this.player.knives}`, 25, 85);
-
-        // Player Health Bar
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.font = '500 10px "Outfit", sans-serif';
-        this.ctx.fillText("VIGILANTE HEALTH", 610, 25);
-        this.ctx.fillStyle = 'rgba(230, 57, 70, 0.2)';
-        this.ctx.fillRect(610, 32, 160, 14);
-        this.ctx.fillStyle = '#e63946'; // red health
-        this.ctx.fillRect(610, 32, 160 * (this.player.health / 100), 14);
-        this.ctx.strokeStyle = '#ffffff';
+        // 1. Top Left Panel: Glassmorphism Card (Score, Progress, Knives)
+        this.ctx.fillStyle = 'rgba(10, 15, 30, 0.75)';
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
         this.ctx.lineWidth = 1.5;
-        this.ctx.strokeRect(610, 32, 160, 14);
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        this.ctx.shadowBlur = 10;
+        
+        // Draw card background
+        this.ctx.beginPath();
+        this.ctx.roundRect(15, 15, 220, 80, [10]);
+        this.ctx.fill();
+        this.ctx.stroke();
+        
+        // Remove shadows for text/bars
+        this.ctx.shadowBlur = 0;
 
-        // Boss Health Bar overlay if boss active
+        // Score Text
+        this.ctx.fillStyle = '#ffb703'; // Gold
+        this.ctx.font = '800 15px "Outfit", sans-serif';
+        this.ctx.fillText(`SCORE: ${this.player.score}`, 30, 35);
+
+        // Progress text and bar
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        this.ctx.beginPath();
+        this.ctx.roundRect(30, 48, 190, 6, [3]);
+        this.ctx.fill();
+
+        const progressGrad = this.ctx.createLinearGradient(30, 0, 220, 0);
+        progressGrad.addColorStop(0, '#00b4d8');
+        progressGrad.addColorStop(1, '#0077b6');
+        this.ctx.fillStyle = progressGrad;
+        this.ctx.beginPath();
+        this.ctx.roundRect(30, 48, 190 * this.gameProgress, 6, [3]);
+        this.ctx.fill();
+
+        this.ctx.fillStyle = '#8b949e';
+        this.ctx.font = '700 9px "Outfit", sans-serif';
+        this.ctx.fillText(`${this.levelData[this.currentLevel - 1].name.toUpperCase()}`, 30, 68);
+
+        // Knives inventory
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '700 12px "Outfit", sans-serif';
+        this.ctx.fillText(`🗡️ KNIVES: ${this.player.knives}`, 30, 85);
+
+        // 2. Top Right Panel: Glassmorphism Card (Player Health)
+        this.ctx.fillStyle = 'rgba(10, 15, 30, 0.75)';
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.roundRect(565, 15, 220, 50, [10]);
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '800 11px "Outfit", sans-serif';
+        this.ctx.fillText("VIGILANTE STATUS: CRAIG PALES", 580, 32);
+
+        // Health Bar Track
+        this.ctx.fillStyle = 'rgba(230, 57, 70, 0.15)';
+        this.ctx.beginPath();
+        this.ctx.roundRect(580, 40, 190, 12, [6]);
+        this.ctx.fill();
+
+        // Health Bar Fill (Gradient)
+        if (this.player.health > 0) {
+            const healthGrad = this.ctx.createLinearGradient(580, 0, 770, 0);
+            healthGrad.addColorStop(0, '#c2410c'); // Deep orange-red
+            healthGrad.addColorStop(1, '#ef4444'); // Bright neon red
+            this.ctx.fillStyle = healthGrad;
+            
+            // Health Glow
+            this.ctx.shadowColor = '#ef4444';
+            this.ctx.shadowBlur = 4;
+            
+            this.ctx.beginPath();
+            this.ctx.roundRect(580, 40, 190 * (this.player.health / 100), 12, [6]);
+            this.ctx.fill();
+            
+            this.ctx.shadowBlur = 0; // Reset shadow
+        }
+        
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.roundRect(580, 40, 190, 12, [6]);
+        this.ctx.stroke();
+
+        // 3. Boss Health Bar Overlay (Bottom Center - Cinematic Style)
         if (this.boss) {
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.font = '800 16px "Outfit", sans-serif';
-            this.ctx.fillText(`BOSS: ${this.boss.name.toUpperCase()}`, 300, 30);
+            // Draw background bar at bottom center
+            const bx = 150;
+            const by = 430;
+            const bw = 500;
+            const bh = 14;
+
+            this.ctx.fillStyle = 'rgba(10, 15, 30, 0.85)';
+            this.ctx.strokeStyle = 'rgba(255, 106, 0, 0.3)';
+            this.ctx.lineWidth = 2;
             
-            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-            this.ctx.fillRect(300, 38, 200, 12);
-            
-            this.ctx.fillStyle = '#ff6a00'; // orange
-            this.ctx.fillRect(300, 38, 200 * (this.boss.health / this.boss.maxHealth), 12);
-            this.ctx.strokeStyle = '#ffffff';
+            // Background box for label and health track
+            this.ctx.beginPath();
+            this.ctx.roundRect(bx - 15, by - 25, bw + 30, bh + 35, [8]);
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Boss Name Text
+            this.ctx.fillStyle = '#ff6a00'; // Orange
+            this.ctx.font = '800 12px "Outfit", sans-serif';
+            this.ctx.fillText(`WARNING: ${this.boss.name.toUpperCase()}`, bx, by - 10);
+
+            // Boss Health Track
+            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+            this.ctx.beginPath();
+            this.ctx.roundRect(bx, by, bw, bh, [4]);
+            this.ctx.fill();
+
+            // Boss Health Fill (Orange-Red Gradient)
+            if (this.boss.health > 0) {
+                const bossGrad = this.ctx.createLinearGradient(bx, 0, bx + bw, 0);
+                bossGrad.addColorStop(0, '#7c2d12');
+                bossGrad.addColorStop(0.5, '#ea580c');
+                bossGrad.addColorStop(1, '#ffedd5');
+                this.ctx.fillStyle = bossGrad;
+                
+                this.ctx.shadowColor = '#ea580c';
+                this.ctx.shadowBlur = 6;
+
+                this.ctx.beginPath();
+                this.ctx.roundRect(bx, by, bw * (this.boss.health / this.boss.maxHealth), bh, [4]);
+                this.ctx.fill();
+                
+                this.ctx.shadowBlur = 0; // Reset shadow
+            }
+
+            // Outer border for track
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
             this.ctx.lineWidth = 1.5;
-            this.ctx.strokeRect(300, 38, 200, 12);
+            this.ctx.beginPath();
+            this.ctx.roundRect(bx, by, bw, bh, [4]);
+            this.ctx.stroke();
         }
 
         this.ctx.restore();

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Craig Pales: Cartoon Storyboard & Game</title>
-    <link rel="stylesheet" href="style.css?v=9">
+    <link rel="stylesheet" href="style.css?v=12">
     <script>
         function showErrorBanner(message, stack) {
             const errorBanner = document.createElement('div');
@@ -60,13 +60,13 @@
         </div>
         
         <nav class="nav-menu">
-            <li class="nav-item active">
+            <li class="nav-item">
                 <button data-tab="storyboard">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
                     Cartoon Storyboard
                 </button>
             </li>
-            <li class="nav-item">
+            <li class="nav-item active">
                 <button data-tab="game">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
                     Vigilante Game
@@ -84,7 +84,7 @@
     <main class="main-content">
 
         <!-- 1. CARTOON STORYBOARD TAB (Video Player Mode) -->
-        <section id="storyboard-tab" class="tab-content active">
+        <section id="storyboard-tab" class="tab-content">
             <h2>Cartoon Storyboard Player</h2>
             <p class="subtitle">Watch Craig Pales' storyline slides sequentially with automated voice narration.</p>
 
@@ -147,7 +147,7 @@
         </section>
 
         <!-- 2. RETRO ACTION GAME TAB -->
-        <section id="game-tab" class="tab-content">
+        <section id="game-tab" class="tab-content active">
             <h2>Vigilante Action Game</h2>
             <p class="subtitle">Stage 1: Gritty New York streets. Control Craig and slice gang clones.</p>
 
@@ -192,7 +192,7 @@
     </main>
 
     <!-- Scripts -->
-    <script src="game.js?v=10"></script>
-    <script src="app.js?v=10"></script>
+    <script src="game.js?v=12"></script>
+    <script src="app.js?v=12"></script>
 </body>
 </html>

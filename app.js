@@ -3,7 +3,7 @@
 // Global State
 const state = {
     version: 8,
-    activeTab: 'storyboard',
+    activeTab: 'game',
     storyboard: [
         {
             id: 1,
@@ -173,530 +173,102 @@ function wrapSvgText(text, maxCharsPerLine = 35) {
 function generateCraigSVG(config, width = "100%", height = "100%") {
     const { outfit, expression, aura, pose, bg, dialogue, specialEffect } = config;
     
-    // Backgrounds definition
-    let bgSvg = '';
-    if (bg === 'shaolin') {
-        bgSvg = `
-            <rect width="400" height="400" fill="#f89e54"/>
-            <circle cx="200" cy="220" r="140" fill="#ffb703" opacity="0.6"/>
-            <!-- Mountains/Pagoda Silhouette -->
-            <path d="M 0 400 L 120 280 L 220 350 L 320 260 L 400 340 L 400 400 Z" fill="#b56576"/>
-            <path d="M 160 300 L 160 270 L 190 270 L 190 300 Z M 150 300 L 200 300 L 200 310 L 150 310 Z M 140 330 L 210 330 L 175 305 Z" fill="#6d597a"/>
-            <rect x="0" y="340" width="400" height="60" fill="#6d597a"/>
-        `;
-    } else if (bg === 'dojo') {
-        bgSvg = `
-            <rect width="400" height="400" fill="#5c3d24"/>
-            <!-- Shoji Screen sliding doors -->
-            <rect x="40" y="50" width="140" height="270" fill="#f4f1de" stroke="#3d2516" stroke-width="6"/>
-            <rect x="220" y="50" width="140" height="270" fill="#f4f1de" stroke="#3d2516" stroke-width="6"/>
-            <path d="M 40 120 L 180 120 M 40 190 L 180 190 M 40 260 L 180 260" stroke="#3d2516" stroke-width="2"/>
-            <path d="M 86 50 L 86 320 M 133 50 L 133 320" stroke="#3d2516" stroke-width="2"/>
-            <path d="M 220 120 L 360 120 M 220 190 L 360 190 M 220 260 L 360 260" stroke="#3d2516" stroke-width="2"/>
-            <path d="M 266 50 L 266 320 M 313 50 L 313 320" stroke="#3d2516" stroke-width="2"/>
-            <rect x="0" y="320" width="400" height="80" fill="#d4c59f"/>
-            <path d="M 0 320 L 400 320" stroke="#3d2516" stroke-width="4"/>
-            <path d="M 100 320 L 100 400 M 300 320 L 300 400" stroke="#a6946d" stroke-width="3"/>
-            <rect x="185" y="60" width="30" height="150" fill="#e63946"/>
-            <rect x="190" y="70" width="20" height="130" fill="#fff"/>
-            <text x="200" y="100" font-family="serif" font-size="20" fill="#000" text-anchor="middle" font-weight="bold">武</text>
-            <text x="200" y="140" font-family="serif" font-size="20" fill="#000" text-anchor="middle" font-weight="bold">道</text>
-        `;
-    } else if (bg === 'new-york') {
-        bgSvg = `
-            <rect width="400" height="400" fill="#141a29"/>
-            <!-- City Skyline -->
-            <rect x="30" y="150" width="70" height="250" fill="#243049" />
-            <rect x="130" y="100" width="90" height="300" fill="#1b2436" />
-            <rect x="250" y="180" width="80" height="220" fill="#243049" />
-            <!-- Windows -->
-            <rect x="50" y="180" width="10" height="15" fill="#f4a261" opacity="0.4"/>
-            <rect x="150" y="130" width="15" height="20" fill="#f4a261" opacity="0.6"/>
-            <rect x="190" y="180" width="15" height="20" fill="#f4a261" opacity="0.2"/>
-            <rect x="290" y="210" width="10" height="15" fill="#f4a261" opacity="0.5"/>
-            <!-- Ground -->
-            <rect x="0" y="330" width="400" height="70" fill="#2d3748"/>
-            <line x1="0" y1="330" x2="400" y2="330" stroke="#4a5568" stroke-width="4"/>
-            <!-- Lamp post -->
-            <path d="M 350 330 L 350 150 L 330 150 L 330 170" fill="none" stroke="#4a5568" stroke-width="6" stroke-linecap="round"/>
-            <circle cx="330" cy="175" r="12" fill="#ffe3a8" filter="drop-shadow(0 0 8px #ffb703)"/>
-        `;
+    // 1. Backgrounds mapping
+    let bgPath = 'assets/bg_new_york.png';
+    if (bg === 'shaolin' || bg === 'dojo') {
+        bgPath = 'assets/bg_dojo.png';
     } else if (bg === 'subway') {
-        bgSvg = `
-            <rect width="400" height="400" fill="#2b2d42"/>
-            <!-- Subway tiles grid pattern -->
-            <path d="M 0 100 L 400 100 M 0 200 L 400 200 M 0 300 L 400 300" stroke="#1d1e2c" stroke-width="4"/>
-            <path d="M 80 0 L 80 400 M 180 0 L 180 400 M 280 0 L 280 400" stroke="#1d1e2c" stroke-width="4"/>
-            <!-- Subway Pillars -->
-            <rect x="50" y="0" width="30" height="400" fill="#e63946" opacity="0.9"/>
-            <rect x="320" y="0" width="30" height="400" fill="#e63946" opacity="0.9"/>
-            <!-- Floor -->
-            <rect x="0" y="320" width="400" height="80" fill="#1b2436"/>
-            <!-- Graffiti -->
-            <text x="220" y="150" font-family="'Outfit', sans-serif" font-weight="900" font-size="28" fill="#ffb703" transform="rotate(-15 220 150)" opacity="0.4">BROOKLYN</text>
-        `;
+        bgPath = 'assets/bg_subway.png';
     } else if (bg === 'rooftop') {
-        bgSvg = `
-            <rect width="400" height="400" fill="#080c14"/>
-            <!-- Moon -->
-            <circle cx="320" cy="80" r="30" fill="#f4f1de" opacity="0.9"/>
-            <circle cx="320" cy="80" r="45" fill="#f4f1de" opacity="0.05"/>
-            <!-- Stars -->
-            <circle cx="60" cy="50" r="1.5" fill="#fff" opacity="0.8"/>
-            <circle cx="150" cy="90" r="1" fill="#fff" opacity="0.5"/>
-            <circle cx="220" cy="40" r="1.5" fill="#fff" opacity="0.8"/>
-            <!-- Water tower silhouette -->
-            <path d="M 50 250 L 50 180 L 80 180 L 80 250" fill="none" stroke="#1b2436" stroke-width="4"/>
-            <rect x="40" y="140" width="50" height="45" fill="#1b2436"/>
-            <polygon points="40 140 65 110 90 140" fill="#151b26"/>
-            <!-- Distance Skyline -->
-            <rect x="120" y="200" width="80" height="200" fill="#141a29"/>
-            <rect x="220" y="160" width="90" height="240" fill="#101520"/>
-            <rect x="240" y="180" width="12" height="15" fill="#ffb703" opacity="0.2"/>
-            <rect x="270" y="210" width="12" height="15" fill="#ffb703" opacity="0.3"/>
-            <!-- Rooftop Wall foreground -->
-            <rect x="0" y="320" width="400" height="80" fill="#2d1d18"/>
-            <!-- Bricks pattern on Wall -->
-            <path d="M 0 340 L 400 340 M 0 360 L 400 360 M 0 380 L 400 380" stroke="#1e1310" stroke-width="2"/>
-            <path d="M 40 320 L 40 340 M 120 320 L 120 340 M 200 320 L 200 340 M 280 320 L 280 340 M 360 320 L 360 340" stroke="#1e1310" stroke-width="2"/>
-            <path d="M 80 340 L 80 360 M 160 340 L 160 360 M 240 340 L 240 360 M 320 340 L 320 360 M 400 340 L 400 360" stroke="#1e1310" stroke-width="2"/>
-            <!-- Ledge border -->
-            <rect x="0" y="315" width="400" height="10" fill="#4e3d30" stroke="#000" stroke-width="2"/>
-        `;
-    } else {
-        bgSvg = `
-            <rect width="400" height="400" fill="#161a25"/>
-            <circle cx="200" cy="200" r="160" fill="#1e2433"/>
-        `;
+        bgPath = 'assets/bg_rooftop.png';
     }
 
-    // Special Visual Effects
-    let effectSvg = '';
-    if (specialEffect === 'blood') {
-        effectSvg = `
-            <!-- Blood Splatter on Wall (Forbidden Fist) -->
-            <path d="M 60 160 Q 30 120 40 80 Q 70 70 90 100 Q 130 90 115 140 Q 140 180 95 200 Z" fill="#800000" opacity="0.85"/>
-            <path d="M 75 120 Q 95 130 85 155 Q 60 145 75 120 Z" fill="#b30000" opacity="0.9"/>
-            <circle cx="50" cy="210" r="5" fill="#800000"/>
-            <circle cx="130" cy="90" r="4" fill="#800000"/>
-            <circle cx="140" cy="150" r="6" fill="#b30000"/>
-            <circle cx="35" cy="140" r="3" fill="#800000"/>
-            
-            <!-- Sliced gang member outline in the background -->
-            <g transform="translate(180, 60) scale(0.7)" opacity="0.9">
-                <!-- Top half falling -->
-                <g transform="translate(-40, -30) rotate(-25)">
-                    <rect x="0" y="0" width="60" height="70" fill="#1c1c1e" rx="10" stroke="#000" stroke-width="5"/>
-                    <circle cx="30" cy="-25" r="22" fill="#ffe3a8" stroke="#000" stroke-width="5"/>
-                    <!-- Leather jacket collar -->
-                    <polygon points="10 0 30 20 20 40" fill="#2d3748"/>
-                    <polygon points="50 0 30 20 40 40" fill="#2d3748"/>
-                </g>
-                <!-- Bottom half sliding -->
-                <g transform="translate(50, 40) rotate(15)">
-                    <rect x="0" y="0" width="50" height="60" fill="#2d3748" stroke="#000" stroke-width="5"/>
-                    <rect x="5" y="60" width="16" height="30" fill="#ffe3a8" stroke="#000" stroke-width="5"/>
-                    <rect x="29" y="60" width="16" height="30" fill="#ffe3a8" stroke="#000" stroke-width="5"/>
-                    <!-- red bloody meaty bone section at split -->
-                    <ellipse cx="25" cy="0" rx="25" ry="12" fill="#c31432" stroke="#000" stroke-width="4"/>
-                    <circle cx="25" cy="0" r="5" fill="#fff"/>
-                </g>
-            </g>
-        `;
-    } else if (specialEffect === 'chains') {
-        effectSvg = `
-            <!-- Broken Steel Chains on Wall/Hands -->
-            <g stroke="#000" stroke-width="3" fill="none" stroke-linecap="round">
-                <path d="M 10 200 L 25 195 A 8 12 0 0 1 35 208 L 20 213 A 8 12 0 0 1 10 200 Z" fill="#95a5a6"/>
-                <path d="M 28 205 L 43 200 A 8 12 0 0 1 53 213 L 38 218 A 8 12 0 0 1 28 205 Z" fill="#7f8c8d" transform="rotate(20 38 205)"/>
-                <path d="M 65 220 L 75 210 A 5 8 0 0 1 85 220 L 75 230 A 5 8 0 0 1 65 220 Z" fill="#bdc3c7" transform="rotate(-45 75 220)"/>
-                <path d="M 390 200 L 375 195 A 8 12 0 0 0 365 208 L 380 213 A 8 12 0 0 0 390 200 Z" fill="#95a5a6"/>
-                <path d="M 372 205 L 357 200 A 8 12 0 0 0 347 213 L 362 218 A 8 12 0 0 0 372 205 Z" fill="#7f8c8d" transform="rotate(-20 362 205)"/>
-                <path d="M 335 220 L 325 210 A 5 8 0 0 0 315 220 L 325 230 A 5 8 0 0 0 335 220 Z" fill="#bdc3c7" transform="rotate(45 325 220)"/>
-            </g>
-        `;
-    } else if (specialEffect === 'ambush') {
-        effectSvg = `
-            <!-- Syndicate kidnapper silhouette in the background -->
-            <g transform="translate(60, 150) scale(0.85)">
-                <path d="M 20 180 L 80 180 L 75 70 L 65 70 L 60 40 L 40 40 L 35 70 L 25 70 Z" fill="#111" stroke="#000" stroke-width="4"/>
-                <circle cx="50" cy="20" r="16" fill="#111" stroke="#000" stroke-width="4"/>
-                <path d="M 40 18 L 48 18 L 47 22 L 41 22 Z" fill="#ffb703"/>
-                <path d="M 52 18 L 60 18 L 59 22 L 53 22 Z" fill="#ffb703"/>
-                <line x1="48" y1="18" x2="52" y2="18" stroke="#ffb703" stroke-width="2"/>
-                <rect x="70" y="70" width="30" height="15" fill="#222" stroke="#000" stroke-width="3" transform="rotate(-10 70 70)"/>
-                <rect x="70" y="75" width="8" height="15" fill="#222" stroke="#000" stroke-width="3" transform="rotate(-10 70 70)"/>
-            </g>
-        `;
-    } else if (specialEffect === 'cuffs') {
-        effectSvg = `
-            <!-- Handcuffs still locked to wrists but broken in the middle -->
-            <g stroke="#000" stroke-width="2.5" fill="none">
-                <ellipse cx="95" cy="265" rx="14" ry="7" fill="none" stroke="#7f8c8d" stroke-width="4"/>
-                <path d="M 95 272 L 95 285" stroke="#7f8c8d" stroke-width="3"/>
-                <ellipse cx="290" cy="115" rx="14" ry="7" fill="none" stroke="#7f8c8d" stroke-width="4" transform="rotate(-15 290 115)"/>
-                <path d="M 290 122 L 290 135" stroke="#7f8c8d" stroke-width="3"/>
-            </g>
-        `;
-    } else if (specialEffect === 'rooftop-fury') {
-        effectSvg = `
-            <!-- Full Moon energy rays or dramatic aura -->
-            <circle cx="320" cy="80" r="120" fill="url(#moon-glow)" opacity="0.15" pointer-events="none"/>
-            <defs>
-                <radialGradient id="moon-glow" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stop-color="#ffb703"/>
-                    <stop offset="100%" stop-color="transparent"/>
-                </radialGradient>
-            </defs>
-        `;
-    } else if (specialEffect === 'training') {
-        effectSvg = `
-            <!-- Shaolin Temple Elder Teacher -->
-            <g id="temple-elder" transform="translate(180, 30) scale(0.85)">
-                <!-- Elder Torso (robe) -->
-                <path d="M 120 200 L 220 200 L 230 320 L 110 320 Z" fill="#b56576" stroke="#000" stroke-width="4.5" />
-                <path d="M 170 200 L 170 320" stroke="#ffb703" stroke-width="8"/>
-                <!-- Elder Legs & Shoes -->
-                <rect x="135" y="320" width="25" height="50" fill="#ffe3a8" stroke="#000" stroke-width="4"/>
-                <rect x="210" y="320" width="25" height="50" fill="#ffe3a8" stroke="#000" stroke-width="4"/>
-                <path d="M 125 370 L 165 370 C 165 370 165 355 145 355 C 125 355 125 370 125 370 Z" fill="#2b2d42" stroke="#000" stroke-width="4"/>
-                <path d="M 210 370 L 250 370 C 250 370 250 355 230 355 C 210 355 210 370 210 370 Z" fill="#2b2d42" stroke="#000" stroke-width="4"/>
-                <!-- Arms pointing/admonishing -->
-                <path d="M 120 220 L 80 230 L 70 240" stroke="#b56576" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="70" cy="240" r="10" fill="#ffe3a8" stroke="#000" stroke-width="3"/>
-                <!-- Head (Old man with long white beard) -->
-                <circle cx="170" cy="130" r="40" fill="#ffe3a8" stroke="#000" stroke-width="4.5" />
-                <!-- Long white beard -->
-                <path d="M 145 150 Q 170 220 195 150 Z" fill="#ffffff" stroke="#000" stroke-width="3"/>
-                <!-- White eyebrows -->
-                <path d="M 145 105 Q 155 90 165 105" stroke="#000" stroke-width="3" fill="none"/>
-                <path d="M 175 105 Q 185 90 195 105" stroke="#000" stroke-width="3" fill="none"/>
-                <path d="M 145 105 Q 155 90 165 105" stroke="#fff" stroke-width="6" stroke-linecap="round" fill="none"/>
-                <path d="M 175 105 Q 185 90 195 105" stroke="#fff" stroke-width="6" stroke-linecap="round" fill="none"/>
-                <!-- Closed eyes -->
-                <path d="M 150 120 Q 160 125 165 120" stroke="#000" stroke-width="3" fill="none"/>
-                <path d="M 175 120 Q 180 125 190 120" stroke="#000" stroke-width="3" fill="none"/>
-                <!-- Wise mouth -->
-                <path d="M 162 142 Q 170 146 178 142" stroke="#000" stroke-width="2.5" fill="none"/>
-            </g>
-        `;
-    }
-
-    // Aura Glow Filter & Sparks
-    let auraFilter = '';
-    let fistGlow = '';
-    if (aura === 'on') {
-        auraFilter = `filter="drop-shadow(0 0 10px #ff6a00) drop-shadow(0 0 20px #e63946)"`;
-        fistGlow = `
-            <!-- Energy Sparks -->
-            <path d="M 100 240 L 90 220 L 105 225 Z" fill="#ffb703" />
-            <path d="M 300 240 L 310 220 L 295 225 Z" fill="#ffb703" />
-            <circle cx="95" cy="255" r="15" fill="rgba(255, 106, 0, 0.4)" filter="blur(4px)"/>
-            <circle cx="305" cy="255" r="15" fill="rgba(255, 106, 0, 0.4)" filter="blur(4px)"/>
-        `;
-    }
-
-    // Fills based on outfit
-    const backArmFill = (outfit === 'vigilante-outfit') ? 'url(#hoodieGrad)' : 'url(#skinGrad)';
-    const frontArmFill = (outfit === 'vigilante-outfit') ? 'url(#hoodieGrad)' : (outfit === 'young-robe' ? 'url(#youngGrad)' : 'url(#robeGrad)');
-    const torsoFill = (outfit === 'vigilante-outfit') ? 'url(#hoodieGrad)' : 'url(#skinGrad)';
-    const legFill = (outfit === 'vigilante-outfit') ? 'url(#hoodieGrad)' : (outfit === 'young-robe' ? 'url(#youngGrad)' : 'url(#pantsGrad)');
-
-    // 1. Torso & Sash
-    let torsoSvg = `
-        <!-- Torso base (bare muscular skin or hoodie) -->
-        <path d="M 140 120 L 260 120 L 250 240 L 150 240 Z" fill="${torsoFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
-    `;
-
-    if (outfit !== 'vigilante-outfit') {
-        // Detailed chest/ab muscles for bare skin
-        torsoSvg += `
-            <!-- Sternum line -->
-            <line x1="200" y1="145" x2="200" y2="220" stroke="#541c0e" stroke-width="2.5" stroke-linecap="round"/>
-            <!-- Bulging Pec shadow & lines (Craig's right, our left) -->
-            <path d="M 145 150 Q 175 185 200 180" fill="none" stroke="#541c0e" stroke-width="3" stroke-linecap="round"/>
-            <path d="M 150 145 Q 175 175 195 172" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.3" stroke-linecap="round"/>
-            <!-- Abdominal grids -->
-            <path d="M 160 200 Q 200 205 235 200" fill="none" stroke="#541c0e" stroke-width="2.5" stroke-linecap="round"/>
-            <path d="M 165 220 Q 200 225 230 220" fill="none" stroke="#541c0e" stroke-width="2.5" stroke-linecap="round"/>
-            <!-- Battle scar on chest -->
-            <path d="M 165 140 L 180 155 M 172 153 L 178 143" stroke="#b31a1a" stroke-width="2" stroke-linecap="round"/>
-            
-            <!-- Saffron robe covering left shoulder/chest (our right) with jagged tear -->
-            <path d="M 260 120 
-                     L 200 120 
-                     L 205 140 
-                     L 190 155 
-                     L 210 175 
-                     L 195 195 
-                     L 215 215 
-                     L 205 240 
-                     L 250 240 Z" fill="${frontArmFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
-            <!-- Robe creases -->
-            <path d="M 245 130 L 220 180" stroke="#672905" stroke-width="2.5" fill="none"/>
-            <path d="M 250 165 L 225 210" stroke="#672905" stroke-width="2.5" fill="none"/>
-            <path d="M 252 200 L 235 235" stroke="#672905" stroke-width="2.5" fill="none"/>
-            
-            <!-- Black Sash Belt -->
-            <rect x="145" y="240" width="110" height="15" fill="#111" stroke="#000" stroke-width="4" rx="3"/>
-            <!-- Hanging sash tails -->
-            <path d="M 180 255 L 175 300 L 165 295 L 172 255 Z" fill="#111" stroke="#000" stroke-width="3"/>
-            <path d="M 190 255 L 195 315 L 182 312 L 182 255 Z" fill="#111" stroke="#000" stroke-width="3"/>
-        `;
-    } else {
-        // Zipped hoodie overlay
-        torsoSvg += `
-            <path d="M 200 120 L 200 240" stroke="#1c2429" stroke-width="3"/>
-            <!-- Black Sash Belt (Hoodie band) -->
-            <rect x="145" y="240" width="110" height="15" fill="#1f292e" stroke="#000" stroke-width="4" rx="3"/>
-        `;
-    }
-
-    // 2. Arms (left = back, right = front)
-    let leftArmSvg = ''; 
-    let rightArmSvg = ''; 
-
-    // Back arm (our left)
+    // 2. Craig Pose mapping
+    let craigPath = 'assets/craig_idle.png';
     if (pose === 'fighting') {
-        // Punching arm extending forward (cross punch)
-        leftArmSvg = `
-            <!-- Outer stroke for back arm punching -->
-            <path d="M 134 135 C 160 128 200 130 240 132 C 265 133 275 133 282 135 L 282 147 C 275 145 255 147 230 145 C 190 143 160 143 142 140 Z" fill="${backArmFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
-            <!-- Fist -->
-            <circle cx="284" cy="141" r="11" fill="url(#skinGrad)" stroke="#000" stroke-width="4.5" ${auraFilter}/>
-        `;
-        if (outfit !== 'vigilante-outfit') {
-            leftArmSvg += `
-                <!-- Bicep vein for bare punching arm -->
-                <path d="M 148 136 Q 210 138 270 136" fill="none" stroke="#6b8e8f" stroke-width="1.8"/>
-            `;
-        }
+        craigPath = 'assets/craig_punch.png';
     } else if (pose === 'victory') {
-        // Back arm raised in victory
-        leftArmSvg = `
-            <!-- Outer stroke for back arm raised -->
-            <path d="M 134 135 C 124 115 112 90 116 60 L 128 58 C 126 80 135 100 142 120 Z" fill="${backArmFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
-            <!-- Fist -->
-            <circle cx="122" cy="54" r="11" fill="url(#skinGrad)" stroke="#000" stroke-width="4.5" ${auraFilter}/>
-        `;
-        if (outfit !== 'vigilante-outfit') {
-            leftArmSvg += `
-                <!-- Vein -->
-                <path d="M 126 120 Q 120 95 120 70" fill="none" stroke="#6b8e8f" stroke-width="1.5"/>
-            `;
-        }
-    } else {
-        // Back arm hanging down
-        leftArmSvg = `
-            <!-- Outer stroke for back arm hanging -->
-            <path d="M 134 135 C 114 138 108 160 110 180 C 112 195 106 210 112 222 L 124 220 C 127 210 122 190 130 170 C 133 160 142 145 142 135 Z" fill="${backArmFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
-            <!-- Fist -->
-            <circle cx="118" cy="222" r="10" fill="url(#skinGrad)" stroke="#000" stroke-width="4.5"/>
-        `;
-        if (outfit !== 'vigilante-outfit') {
-            leftArmSvg += `
-                <!-- Vein -->
-                <path d="M 125 150 Q 118 175 116 205" fill="none" stroke="#6b8e8f" stroke-width="1.8" stroke-linecap="round"/>
-            `;
-        }
+        craigPath = 'assets/craig_victory.png';
     }
 
-    // Front arm (our right)
-    if (pose === 'fighting') {
-        // Front arm (sleeved) guarding at chest
-        rightArmSvg = `
-            <!-- Outer stroke for front arm guard -->
-            <path d="M 265 130 C 255 145 245 165 248 172 L 260 164 C 258 160 263 145 270 135 Z" fill="${frontArmFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
-            <!-- Hand -->
-            <circle cx="254" cy="168" r="8" fill="url(#skinGrad)" stroke="#000" stroke-width="3.5"/>
-        `;
-    } else {
-        // Front arm hanging down
-        rightArmSvg = `
-            <!-- Outer stroke for front arm hanging -->
-            <path d="M 265 130 C 285 135 292 165 288 198 C 285 212 278 220 282 225 L 270 223 C 265 215 266 195 258 175 C 255 165 248 140 245 130 Z" fill="${frontArmFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
-            <!-- Sleeve cuff line if not vigilante -->
-            ${outfit !== 'vigilante-outfit' ? `<ellipse cx="276" cy="224" rx="7" ry="2.5" fill="none" stroke="#000" stroke-width="3" transform="rotate(-5 276 224)"/>` : ''}
-            <!-- Hand -->
-            <circle cx="276" cy="232" r="8" fill="url(#skinGrad)" stroke="#000" stroke-width="4"/>
+    // 3. Special Effects layers
+    let extraSvg = '';
+    
+    // Training slide: show Sensei next to young Craig
+    if (specialEffect === 'training') {
+        extraSvg += `<image href="assets/boss_sensei.png" x="50" y="140" width="160" height="160" />`;
+    }
+    
+    // Ambush slide: show leather jacket thug next to Craig
+    if (specialEffect === 'ambush') {
+        extraSvg += `<image href="assets/thug_leather.png" x="40" y="130" width="160" height="160" />`;
+    }
+    
+    // Blood slide: show blood overlay & split thug
+    if (specialEffect === 'blood') {
+        extraSvg += `
+            <!-- Blood splatters -->
+            <path d="M 50 120 Q 30 90 20 60 Q 60 40 80 80 Q 120 70 100 110 Z" fill="#800000" opacity="0.8"/>
+            <circle cx="130" cy="140" r="10" fill="#b30000" opacity="0.9"/>
+            <circle cx="40" cy="150" r="6" fill="#800000" opacity="0.8"/>
+            <!-- Dismembered thug in background -->
+            <g opacity="0.85">
+                <image href="assets/thug_afro.png" x="220" y="140" width="150" height="150" transform="rotate(35 295 215)"/>
+            </g>
         `;
     }
 
-    // 3. Legs
-    let legsSvg = `
-        <!-- Left Leg (back) -->
-        <path d="M 150 255 L 190 255 L 180 340 L 140 340 Z" fill="${legFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
-        <!-- Right Leg (front) -->
-        <path d="M 210 255 L 250 255 L 260 340 L 220 340 Z" fill="${legFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
-        
-        <!-- Leg wraps (gold wraps on shins, if not vigilante outfit) -->
-        ${outfit !== 'vigilante-outfit' ? `
-            <path d="M 140 340 L 180 340 L 175 365 L 145 365 Z" fill="#ffb703" stroke="#000" stroke-width="3.5" stroke-linejoin="round"/>
-            <path d="M 220 340 L 260 340 L 255 365 L 225 365 Z" fill="#ffb703" stroke="#000" stroke-width="3.5" stroke-linejoin="round"/>
-            <!-- wrap lines -->
-            <line x1="142" y1="348" x2="178" y2="348" stroke="#000" stroke-width="1.5"/>
-            <line x1="144" y1="356" x2="176" y2="356" stroke="#000" stroke-width="1.5"/>
-            <line x1="222" y1="348" x2="258" y2="348" stroke="#000" stroke-width="1.5"/>
-            <line x1="224" y1="356" x2="256" y2="356" stroke="#000" stroke-width="1.5"/>
-        ` : ''}
-
-        <!-- Shoes -->
-        <path d="M 145 365 C 145 365 140 380 160 380 C 180 380 175 365 175 365 Z" fill="#2b2d42" stroke="#000" stroke-width="4"/>
-        <path d="M 225 365 C 225 365 220 380 240 380 C 260 380 255 365 255 365 Z" fill="#2b2d42" stroke="#000" stroke-width="4"/>
-    `;
-
-    // 4. Expressions components
-    let mouthSvg = `<path d="M 192 87 Q 200 92 208 87" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round"/>`; // Calm smile
-    let eyesSvg = `
-        <circle cx="189" cy="75" r="3.5" fill="#000"/>
-        <circle cx="211" cy="75" r="3.5" fill="#000"/>
-    `;
-    let eyebrowsSvg = `
-        <path d="M 178 68 L 195 72" stroke="#000" stroke-width="3" stroke-linecap="round"/>
-        <path d="M 222 68 L 205 72" stroke="#000" stroke-width="3" stroke-linecap="round"/>
-    `;
-
-    if (expression === 'determined') {
-        mouthSvg = `
-            <!-- Grim gritting mouth -->
-            <rect x="192" y="84" width="16" height="6" fill="#4a121a" stroke="#000" stroke-width="2" rx="1"/>
-            <!-- Teeth line -->
-            <line x1="193" y1="87" x2="207" y2="87" stroke="#fff" stroke-width="1.5"/>
-        `;
-        eyebrowsSvg = `
-            <!-- Angled angry eyebrows -->
-            <path d="M 178 67 L 196 73" stroke="#000" stroke-width="4.5" stroke-linecap="round"/>
-            <path d="M 222 67 L 204 73" stroke="#000" stroke-width="4.5" stroke-linecap="round"/>
-            <!-- Brow shadow -->
-            <path d="M 180 73 L 220 73" stroke="rgba(84,28,14,0.4)" stroke-width="2"/>
-        `;
-    } else if (expression === 'fury') {
-        mouthSvg = `
-            <!-- Screaming open mouth with teeth -->
-            <path d="M 190 85 Q 200 102 210 85 Z" fill="#612a1c" stroke="#000" stroke-width="3"/>
-            <path d="M 192 86 Q 200 90 208 86" fill="none" stroke="#fff" stroke-width="2.5"/>
-            <path d="M 194 92 Q 200 90 206 92" fill="none" stroke="#fff" stroke-width="2"/>
-        `;
-        eyesSvg = `
-            <!-- White glowing eyes with red outline -->
-            <path d="M 183 75 L 194 77 L 190 71 Z" fill="#fff" stroke="#e63946" stroke-width="2.5" ${auraFilter}/>
-            <path d="M 217 75 L 206 77 L 210 71 Z" fill="#fff" stroke="#e63946" stroke-width="2.5" ${auraFilter}/>
-        `;
-        eyebrowsSvg = `
-            <!-- Angled angry eyebrows -->
-            <path d="M 178 65 L 197 74" stroke="#000" stroke-width="5" stroke-linecap="round"/>
-            <path d="M 222 65 L 203 74" stroke="#000" stroke-width="5" stroke-linecap="round"/>
+    // Chains slide: show broken chains overlay
+    if (specialEffect === 'chains') {
+        extraSvg += `
+            <!-- Broken Chains -->
+            <path d="M 40 230 C 60 210 90 210 110 230" stroke="#7f8c8d" stroke-width="6" fill="none" stroke-dasharray="10, 5"/>
+            <path d="M 290 230 C 310 210 340 210 360 230" stroke="#7f8c8d" stroke-width="6" fill="none" stroke-dasharray="10, 5"/>
         `;
     }
 
-    // Hood overlay for Vigilante Outfit
-    let hoodSvg = '';
-    if (outfit === 'vigilante-outfit') {
-        hoodSvg = `
-            <!-- Hood base behind head -->
-            <path d="M 165 75 C 160 35 240 35 235 75 C 248 90 240 108 235 112 L 165 112 C 160 108 152 90 165 75 Z" fill="url(#hoodieGrad)" stroke="#000" stroke-width="4" />
+    // Craig position and scale
+    let craigX = 140;
+    let craigY = 120;
+    let craigW = 220;
+    let craigH = 220;
+
+    // Young Craig is scaled down
+    if (outfit === 'young-robe') {
+        craigX = 180;
+        craigY = 170;
+        craigW = 160;
+        craigH = 160;
+    }
+
+    // Dark arts purple aura filter overlay
+    let auraOverlay = '';
+    if (outfit !== 'young-robe') {
+        auraOverlay = `
+            <!-- Purple Dark Arts Aura behind Craig -->
+            <circle cx="${craigX + craigW/2}" cy="${craigY + craigH/2}" r="90" fill="rgba(128, 0, 255, 0.22)" filter="blur(25px)"/>
         `;
     }
 
-    // Assemble head and face components
-    let headGroupSvg = `
-        <!-- Bald head tapering to chin -->
-        <path d="M 174 60 C 174 35 226 35 226 60 C 228 85 215 102 200 102 C 185 102 172 85 174 60 Z" fill="url(#headGrad)" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
-        
-        <!-- Ears (if not vigilante) -->
-        ${outfit !== 'vigilante-outfit' ? `
-            <path d="M 175 58 C 170 54 170 68 175 64 Z" fill="url(#headGrad)" stroke="#000" stroke-width="3"/>
-            <path d="M 225 58 C 230 54 230 68 225 64 Z" fill="url(#headGrad)" stroke="#000" stroke-width="3"/>
-        ` : ''}
-        
-        <!-- Face details -->
-        ${eyesSvg}
-        ${eyebrowsSvg}
-        ${mouthSvg}
-        
-        <!-- Nose -->
-        <path d="M 200 74 L 197 81 L 202 81" fill="none" stroke="#541c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        
-        <!-- Scar under left eye (our right) -->
-        ${outfit !== 'young-robe' ? `<path d="M 211 79 L 213 86" stroke="#b31a1a" stroke-width="1.8" stroke-linecap="round"/>` : ''}
-        
-        <!-- Forehead wrinkles -->
-        ${outfit !== 'young-robe' ? `
-            <path d="M 194 62 L 199 64 M 201 62 L 206 61 M 196 66 L 204 66" stroke="rgba(0,0,0,0.5)" stroke-width="1.5"/>
-        ` : ''}
-    `;
-
-    if (outfit === 'vigilante-outfit') {
-        headGroupSvg += `
-            <!-- Hood opening framing face -->
-            <path d="M 174 75 C 174 52 226 52 226 75 C 226 95 210 105 200 105 C 190 105 174 95 174 75 Z" fill="none" stroke="#000" stroke-width="4"/>
-        `;
-    }
-
-    // Assemble dynamic SVG
     const svgContent = `
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="${width}" height="${height}">
-            <defs>
-                <linearGradient id="skinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#ffdfd3"/>
-                    <stop offset="50%" stop-color="#cf7a5c"/>
-                    <stop offset="100%" stop-color="#612a1c"/>
-                </linearGradient>
-                <linearGradient id="robeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#d97332"/>
-                    <stop offset="60%" stop-color="#a24a15"/>
-                    <stop offset="100%" stop-color="#672905"/>
-                </linearGradient>
-                <radialGradient id="headGrad" cx="35%" cy="35%" r="65%">
-                    <stop offset="0%" stop-color="#ffdfd3"/>
-                    <stop offset="50%" stop-color="#cf7a5c"/>
-                    <stop offset="100%" stop-color="#612a1c"/>
-                </radialGradient>
-                <linearGradient id="pantsGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stop-color="#d97332"/>
-                    <stop offset="100%" stop-color="#672905"/>
-                </linearGradient>
-                <linearGradient id="youngGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#ffb703"/>
-                    <stop offset="100%" stop-color="#e29578"/>
-                </linearGradient>
-                <linearGradient id="hoodieGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#4f5d65"/>
-                    <stop offset="60%" stop-color="#2f3e46"/>
-                    <stop offset="100%" stop-color="#151b1f"/>
-                </linearGradient>
-            </defs>
-            
             <!-- Background Scenery -->
-            ${bgSvg}
+            <image href="${bgPath}" x="0" y="0" width="400" height="400" preserveAspectRatio="xMidYMid slice"/>
 
-            <!-- Special Visual Effects -->
-            ${effectSvg}
+            <!-- Aura behind character -->
+            ${auraOverlay}
 
-            <!-- Craig Character Structure -->
-            <g id="craig-character" ${outfit === 'young-robe' ? 'transform="translate(80, 148) scale(0.6)"' : ''}>
-                ${hoodSvg}
-                ${legsSvg}
-                ${leftArmSvg}
-                ${rightArmSvg}
-                ${torsoSvg}
-                
-                <!-- Head group -->
-                <g id="head-group">
-                    ${headGroupSvg}
-                </g>
+            <!-- Extra scene assets/characters -->
+            ${extraSvg}
 
-                <!-- Energy Sparks overlay -->
-                ${fistGlow}
-            </g>
+            <!-- Craig Character -->
+            <image href="${craigPath}" x="${craigX}" y="${craigY}" width="${craigW}" height="${craigH}"/>
 
             <!-- Speech Bubble overlay if dialogue exists -->
             ${dialogue ? `
                 <g id="speech-bubble" transform="translate(0, 10)">
-                    <!-- Bubble path -->
                     <path d="M 50 20 L 350 20 A 15 15 0 0 1 365 35 L 365 75 A 15 15 0 0 1 350 90 L 220 90 L 200 105 L 180 90 L 50 90 A 15 15 0 0 1 35 75 L 35 35 A 15 15 0 0 1 50 20 Z" fill="#ffffff" stroke="#000000" stroke-width="3" filter="drop-shadow(0 4px 6px rgba(0,0,0,0.15))"/>
-                    <!-- Bubble Dialogue text -->
-                    <text x="200" font-family="'Inter', sans-serif" font-size="12" font-weight="600" fill="#111827" text-anchor="middle" width="300">
+                    <text x="200" font-family="'Outfit', sans-serif" font-size="12" font-weight="700" fill="#111827" text-anchor="middle" width="300">
                         ${wrapSvgText(dialogue)}
                     </text>
                 </g>
@@ -1025,4 +597,5 @@ document.addEventListener('DOMContentLoaded', () => {
     loadFromLocalStorage();
     initRouter();
     initDashboardSlideshow();
+    handleTabChange(state.activeTab); // Initialize game loop immediately on load
 });
