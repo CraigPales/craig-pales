@@ -113,73 +113,28 @@ function floodFillChromaKey(img, keyColor = {r: 0, g: 0, b: 0}, tolerance = 50) 
     return tempCanvas;
 }
 
-function getCentralComponent(canvas) {
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
+function trimCanvasSimple(canvas) {
+    if (canvas.width === 0 || canvas.height === 0) return canvas;
     
     try {
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
         const imgData = ctx.getImageData(0, 0, width, height);
         const data = imgData.data;
         
-        const colActive = new Uint8Array(width);
-        for (let x = 0; x < width; x++) {
-            let activeCount = 0;
-            for (let y = 0; y < height; y++) {
-                if (data[(y * width + x) * 4 + 3] > 0) {
-                    activeCount++;
-                }
-            }
-            // Active if column has at least 12 visible pixels (ignores noise/artifacts)
-            colActive[x] = (activeCount >= 12) ? 1 : 0;
-        }
-        
-        const intervals = [];
-        let inInterval = false;
-        let startX = 0;
-        for (let x = 0; x < width; x++) {
-            if (colActive[x]) {
-                if (!inInterval) {
-                    startX = x;
-                    inInterval = true;
-                }
-            } else {
-                if (inInterval) {
-                    intervals.push({start: startX, end: x - 1});
-                    inInterval = false;
-                }
-            }
-        }
-        if (inInterval) {
-            intervals.push({start: startX, end: width - 1});
-        }
-        
-        if (intervals.length === 0) return {minX: 0, maxX: width - 1, minY: 0, maxY: height - 1};
-        
-        let bestInterval = intervals[0];
-        let bestScore = -Infinity;
-        const center = width / 2;
-        
-        for (const inter of intervals) {
-            const w = inter.end - inter.start + 1;
-            const interCenter = (inter.start + inter.end) / 2;
-            const dist = Math.abs(interCenter - center);
-            
-            if (w < 25 && intervals.length > 1) continue;
-            
-            const score = w - dist * 1.5;
-            if (score > bestScore) {
-                bestScore = score;
-                bestInterval = inter;
-            }
-        }
-        
+        let minX = width;
+        let maxX = 0;
         let minY = height;
         let maxY = 0;
         let found = false;
+        
         for (let y = 0; y < height; y++) {
-            for (let x = bestInterval.start; x <= bestInterval.end; x++) {
-                if (data[(y * width + x) * 4 + 3] > 0) {
+            for (let x = 0; x < width; x++) {
+                const alpha = data[(y * width + x) * 4 + 3];
+                if (alpha > 0) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
                     if (y < minY) minY = y;
                     if (y > maxY) maxY = y;
                     found = true;
@@ -188,15 +143,14 @@ function getCentralComponent(canvas) {
         }
         
         if (!found) {
-            return {minX: bestInterval.start, maxX: bestInterval.end, minY: 0, maxY: height - 1};
+            return canvas;
         }
         
-        // Crop bottom shadows: scan from maxY upwards.
-        // If a row consists only of transparent or dark shadow-like pixels, move maxY up.
+        // Shadow cropping: scan from maxY upwards
         let feetY = maxY;
         for (let y = maxY; y > minY; y--) {
             let hasRealFootPixel = false;
-            for (let x = bestInterval.start; x <= bestInterval.end; x++) {
+            for (let x = minX; x <= maxX; x++) {
                 const idx = (y * width + x) * 4;
                 const a = data[idx + 3];
                 if (a > 0) {
@@ -204,8 +158,8 @@ function getCentralComponent(canvas) {
                     const g = data[idx + 1];
                     const b = data[idx + 2];
                     const distSq = r * r + g * g + b * b;
-                    // If pixel is brighter than dark shadow threshold, it's a real foot pixel!
-                    if (distSq > 5625) { // 75^2
+                    // If the pixel is brighter than dark black shadow (75^2), it's a real foot pixel!
+                    if (distSq > 5625) {
                         hasRealFootPixel = true;
                         break;
                     }
@@ -218,68 +172,22 @@ function getCentralComponent(canvas) {
         }
         maxY = feetY;
         
-        return {
-            minX: bestInterval.start,
-            maxX: bestInterval.end,
-            minY: minY,
-            maxY: maxY
-        };
-    } catch (e) {
-        return {minX: 0, maxX: width - 1, minY: 0, maxY: height - 1};
-    }
-}
-
-function trimImage(canvas) {
-    if (canvas.width === 0 || canvas.height === 0) return canvas;
-    
-    try {
-        const bounds = getCentralComponent(canvas);
-        const trimWidth = bounds.maxX - bounds.minX + 1;
-        const trimHeight = bounds.maxY - bounds.minY + 1;
+        const trimWidth = maxX - minX + 1;
+        const trimHeight = maxY - minY + 1;
+        
+        if (trimWidth <= 0 || trimHeight <= 0) return canvas;
         
         const trimmedCanvas = document.createElement('canvas');
         trimmedCanvas.width = trimWidth;
         trimmedCanvas.height = trimHeight;
         const trimmedCtx = trimmedCanvas.getContext('2d');
         
-        trimmedCtx.drawImage(canvas, bounds.minX, bounds.minY, trimWidth, trimHeight, 0, 0, trimWidth, trimHeight);
+        trimmedCtx.drawImage(canvas, minX, minY, trimWidth, trimHeight, 0, 0, trimWidth, trimHeight);
         return trimmedCanvas;
     } catch (e) {
-        console.warn("Trim image failed:", e);
+        console.warn("Trim canvas failed:", e);
         return canvas;
     }
-}
-
-function generateWalkFrames(canvas) {
-    if (!canvas || canvas.width === 0 || canvas.height === 0) return [canvas, canvas, canvas];
-    const w = canvas.width;
-    const h = canvas.height;
-    
-    const f1 = canvas;
-    
-    const f2 = document.createElement('canvas');
-    f2.width = Math.ceil(w * 1.05);
-    f2.height = h;
-    const ctx2 = f2.getContext('2d');
-    ctx2.save();
-    ctx2.translate(f2.width / 2, h);
-    ctx2.scale(1.04, 0.95);
-    ctx2.transform(1, 0, -0.06, 1, 0, 0); // Tilt forward slightly
-    ctx2.drawImage(canvas, -w / 2, -h);
-    ctx2.restore();
-    
-    const f3 = document.createElement('canvas');
-    f3.width = Math.ceil(w * 1.05);
-    f3.height = h;
-    const ctx3 = f3.getContext('2d');
-    ctx3.save();
-    ctx3.translate(f3.width / 2, h);
-    ctx3.scale(0.96, 1.05);
-    ctx3.transform(1, 0, 0.06, 1, 0, 0); // Tilt backward slightly
-    ctx3.drawImage(canvas, -w / 2, -h);
-    ctx3.restore();
-    
-    return [f1, f2, f3];
 }
 
 function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
@@ -299,14 +207,52 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
         if (spriteObj.loaded) return;
         if (img.naturalWidth === 0 || img.naturalHeight === 0) return;
         
-        const transparentCanvas = floodFillChromaKey(img, keyColor, tolerance);
-        const trimmedCanvas = trimImage(transparentCanvas);
-        spriteObj.canvas = trimmedCanvas;
-        spriteObj.walkFrames = generateWalkFrames(trimmedCanvas);
+        // Use appropriate key color and tolerance:
+        // Crouch has a white background, others have black
+        let keyColorVal = keyColor;
+        let tolVal = tolerance;
+        if (src.includes('craig_crouch')) {
+            keyColorVal = {r: 255, g: 255, b: 255};
+            tolVal = 55;
+        } else {
+            keyColorVal = {r: 0, g: 0, b: 0};
+            tolVal = 55;
+        }
+        
+        const transparentCanvas = floodFillChromaKey(img, keyColorVal, tolVal);
+        
+        const isMultiFrame = src.includes('craig_walk') || src.includes('thug_afro') || src.includes('thug_leather');
+        
+        if (isMultiFrame) {
+            const w = transparentCanvas.width;
+            const h = transparentCanvas.height;
+            const colW = Math.floor(w / 3);
+            
+            const frames = [];
+            for (let i = 0; i < 3; i++) {
+                const colCanvas = document.createElement('canvas');
+                colCanvas.width = colW;
+                colCanvas.height = h;
+                const colCtx = colCanvas.getContext('2d');
+                colCtx.drawImage(transparentCanvas, i * colW, 0, colW, h, 0, 0, colW, h);
+                
+                const trimmedCol = trimCanvasSimple(colCanvas);
+                frames.push(trimmedCol);
+            }
+            
+            // Middle frame as the default stance
+            spriteObj.canvas = frames[1];
+            spriteObj.walkFrames = frames;
+        } else {
+            const trimmedCanvas = trimCanvasSimple(transparentCanvas);
+            spriteObj.canvas = trimmedCanvas;
+            spriteObj.walkFrames = [trimmedCanvas, trimmedCanvas, trimmedCanvas];
+        }
+        
         try {
-            spriteObj.dataUrl = trimmedCanvas.toDataURL();
+            spriteObj.dataUrl = spriteObj.canvas.toDataURL();
         } catch (e) {
-            // Silent block for local CORS
+            // CORS
         }
         spriteObj.loaded = true;
         
@@ -325,9 +271,23 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
     return spriteObj;
 }
 
+
+function makeDistortionCurve(amount) {
+    const k = typeof amount === 'number' ? amount : 50;
+    const n_samples = 44100;
+    const curve = new Float32Array(n_samples);
+    const deg = Math.PI / 180;
+    for (let i = 0; i < n_samples; ++i) {
+        const x = (i * 2) / n_samples - 1;
+        curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
+    }
+    return curve;
+}
+
 class RetroAudio {
     constructor() {
         this.ctx = null;
+        this.distCurve = null;
     }
 
     init() {
@@ -337,6 +297,9 @@ class RetroAudio {
             }
             if (this.ctx && this.ctx.state === 'suspended') {
                 this.ctx.resume();
+            }
+            if (!this.distCurve) {
+                this.distCurve = makeDistortionCurve(80);
             }
         } catch (e) {
             console.warn("Audio Context init blocked or failed:", e);
@@ -367,17 +330,148 @@ class RetroAudio {
         if (!this.ctx) return;
         try {
             const now = this.ctx.currentTime;
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(200, now);
-            osc.frequency.setValueAtTime(80, now + 0.08);
-            gain.gain.setValueAtTime(0.15, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(now);
-            osc.stop(now + 0.1);
+            
+            // Swoosh wind sweep
+            const oscSwoosh = this.ctx.createOscillator();
+            const gainSwoosh = this.ctx.createGain();
+            oscSwoosh.type = 'triangle';
+            oscSwoosh.frequency.setValueAtTime(600, now);
+            oscSwoosh.frequency.exponentialRampToValueAtTime(180, now + 0.08);
+            gainSwoosh.gain.setValueAtTime(0.08, now);
+            gainSwoosh.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+            oscSwoosh.connect(gainSwoosh);
+            gainSwoosh.connect(this.ctx.destination);
+            oscSwoosh.start(now);
+            oscSwoosh.stop(now + 0.08);
+
+            // Smack impact (20ms delay)
+            const hitTime = now + 0.02;
+            
+            // Meaty low thud
+            const oscThud = this.ctx.createOscillator();
+            const gainThud = this.ctx.createGain();
+            oscThud.type = 'sine';
+            oscThud.frequency.setValueAtTime(160, hitTime);
+            oscThud.frequency.exponentialRampToValueAtTime(45, hitTime + 0.12);
+            gainThud.gain.setValueAtTime(0.35, hitTime);
+            gainThud.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.12);
+            oscThud.connect(gainThud);
+
+            // Saturated slap noise
+            const bufferSize = this.ctx.sampleRate * 0.08;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(1400, hitTime);
+            filter.Q.value = 3.0;
+
+            const gainNoise = this.ctx.createGain();
+            gainNoise.gain.setValueAtTime(0.45, hitTime);
+            gainNoise.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.08);
+            
+            noise.connect(filter);
+            filter.connect(gainNoise);
+
+            // Distortion for punchy clipping crunch
+            const dist = this.ctx.createWaveShaper();
+            dist.curve = makeDistortionCurve(100);
+            dist.oversample = '4x';
+            
+            gainThud.connect(dist);
+            gainNoise.connect(dist);
+
+            const finalGain = this.ctx.createGain();
+            finalGain.gain.setValueAtTime(0.7, hitTime);
+            finalGain.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.15);
+            
+            dist.connect(finalGain);
+            finalGain.connect(this.ctx.destination);
+
+            oscThud.start(hitTime);
+            oscThud.stop(hitTime + 0.12);
+            noise.start(hitTime);
+        } catch(e) {}
+    }
+
+    playKick() {
+        this.init();
+        if (!this.ctx) return;
+        try {
+            const now = this.ctx.currentTime;
+            
+            // Deeper swoosh wind sweep
+            const oscSwoosh = this.ctx.createOscillator();
+            const gainSwoosh = this.ctx.createGain();
+            oscSwoosh.type = 'triangle';
+            oscSwoosh.frequency.setValueAtTime(450, now);
+            oscSwoosh.frequency.exponentialRampToValueAtTime(110, now + 0.12);
+            gainSwoosh.gain.setValueAtTime(0.12, now);
+            gainSwoosh.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+            oscSwoosh.connect(gainSwoosh);
+            gainSwoosh.connect(this.ctx.destination);
+            oscSwoosh.start(now);
+            oscSwoosh.stop(now + 0.12);
+
+            // Very heavy impact (30ms delay)
+            const hitTime = now + 0.03;
+            
+            // Sub-bass heavy thud
+            const oscThud = this.ctx.createOscillator();
+            const gainThud = this.ctx.createGain();
+            oscThud.type = 'sine';
+            oscThud.frequency.setValueAtTime(120, hitTime);
+            oscThud.frequency.exponentialRampToValueAtTime(35, hitTime + 0.18);
+            gainThud.gain.setValueAtTime(0.45, hitTime);
+            gainThud.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.18);
+            oscThud.connect(gainThud);
+
+            // Saturated bass slap noise
+            const bufferSize = this.ctx.sampleRate * 0.12;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(800, hitTime);
+            filter.Q.value = 2.0;
+
+            const gainNoise = this.ctx.createGain();
+            gainNoise.gain.setValueAtTime(0.5, hitTime);
+            gainNoise.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.1);
+            
+            noise.connect(filter);
+            filter.connect(gainNoise);
+
+            // Heavier distortion curves for kicks
+            const dist = this.ctx.createWaveShaper();
+            dist.curve = makeDistortionCurve(140);
+            dist.oversample = '4x';
+            
+            gainThud.connect(dist);
+            gainNoise.connect(dist);
+
+            const finalGain = this.ctx.createGain();
+            finalGain.gain.setValueAtTime(0.8, hitTime);
+            finalGain.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.22);
+            
+            dist.connect(finalGain);
+            finalGain.connect(this.ctx.destination);
+
+            oscThud.start(hitTime);
+            oscThud.stop(hitTime + 0.18);
+            noise.start(hitTime);
         } catch(e) {}
     }
 
@@ -386,6 +480,7 @@ class RetroAudio {
         if (!this.ctx) return;
         try {
             const now = this.ctx.currentTime;
+            // Throw knife swoosh sound: high-pitch bandpass noise sweep
             const bufferSize = this.ctx.sampleRate * 0.12;
             const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
             const data = buffer.getChannelData(0);
@@ -412,22 +507,171 @@ class RetroAudio {
         } catch(e) {}
     }
 
+    playSplatter() {
+        this.init();
+        if (!this.ctx) return;
+        try {
+            const now = this.ctx.currentTime;
+            
+            // Gritty high frequency sawtooth sweep (the slice cut)
+            const oscSlice = this.ctx.createOscillator();
+            const gainSlice = this.ctx.createGain();
+            oscSlice.type = 'sawtooth';
+            oscSlice.frequency.setValueAtTime(800, now);
+            oscSlice.frequency.exponentialRampToValueAtTime(120, now + 0.08);
+            gainSlice.gain.setValueAtTime(0.2, now);
+            gainSlice.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+            oscSlice.connect(gainSlice);
+            
+            // Wet noise splatter (squeezing blood splatter)
+            const bufferSize = this.ctx.sampleRate * 0.15;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(2200, now);
+            filter.frequency.exponentialRampToValueAtTime(250, now + 0.15);
+            filter.Q.value = 4.0;
+
+            const gainNoise = this.ctx.createGain();
+            gainNoise.gain.setValueAtTime(0.55, now);
+            gainNoise.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+            
+            noise.connect(filter);
+            filter.connect(gainNoise);
+
+            // Saturated distortion
+            const dist = this.ctx.createWaveShaper();
+            dist.curve = makeDistortionCurve(120);
+            dist.oversample = '4x';
+            
+            gainSlice.connect(dist);
+            gainNoise.connect(dist);
+
+            const finalGain = this.ctx.createGain();
+            finalGain.gain.setValueAtTime(0.75, now);
+            finalGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+            
+            dist.connect(finalGain);
+            finalGain.connect(this.ctx.destination);
+
+            oscSlice.start(now);
+            oscSlice.stop(now + 0.08);
+            noise.start(now);
+        } catch(e) {}
+    }
+
+    playBreak() {
+        this.init();
+        if (!this.ctx) return;
+        try {
+            const now = this.ctx.currentTime;
+            
+            // Heavy wooden impact thud
+            const oscImpact = this.ctx.createOscillator();
+            const gainImpact = this.ctx.createGain();
+            oscImpact.type = 'sawtooth';
+            oscImpact.frequency.setValueAtTime(180, now);
+            oscImpact.frequency.exponentialRampToValueAtTime(50, now + 0.2);
+            gainImpact.gain.setValueAtTime(0.35, now);
+            gainImpact.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+            oscImpact.connect(gainImpact);
+
+            // Cracking wood noise sweeps
+            const bufferSize = this.ctx.sampleRate * 0.22;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(900, now);
+            filter.frequency.exponentialRampToValueAtTime(150, now + 0.22);
+            filter.Q.value = 1.5;
+
+            const gainNoise = this.ctx.createGain();
+            gainNoise.gain.setValueAtTime(0.6, now);
+            gainNoise.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+            noise.connect(filter);
+            filter.connect(gainNoise);
+
+            // Wood splintering cracking pulses (multiple sweeps)
+            const numSplinters = 4;
+            for (let i = 0; i < numSplinters; i++) {
+                const spTime = now + 0.01 + (i * 0.035);
+                const oscSp = this.ctx.createOscillator();
+                const gainSp = this.ctx.createGain();
+                oscSp.type = 'triangle';
+                oscSp.frequency.setValueAtTime(3500 - (i * 600), spTime);
+                oscSp.frequency.exponentialRampToValueAtTime(1000 - (i * 200), spTime + 0.018);
+                
+                gainSp.gain.setValueAtTime(0.25, spTime);
+                gainSp.gain.exponentialRampToValueAtTime(0.001, spTime + 0.018);
+                
+                oscSp.connect(gainSp);
+                gainSp.connect(this.ctx.destination);
+                oscSp.start(spTime);
+                oscSp.stop(spTime + 0.018);
+            }
+
+            // Distort the main thud and cracking noise
+            const dist = this.ctx.createWaveShaper();
+            dist.curve = makeDistortionCurve(110);
+            dist.oversample = '4x';
+            
+            gainImpact.connect(dist);
+            gainNoise.connect(dist);
+
+            const finalGain = this.ctx.createGain();
+            finalGain.gain.setValueAtTime(0.85, now);
+            finalGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+            
+            dist.connect(finalGain);
+            finalGain.connect(this.ctx.destination);
+
+            oscImpact.start(now);
+            oscImpact.stop(now + 0.2);
+            noise.start(now);
+        } catch(e) {}
+    }
+
     playHurt() {
         this.init();
         if (!this.ctx) return;
         try {
             const now = this.ctx.currentTime;
+            
+            // Low-end heavy chest blow thud
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
             osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(120, now);
-            osc.frequency.linearRampToValueAtTime(40, now + 0.2);
-            gain.gain.setValueAtTime(0.2, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.frequency.setValueAtTime(100, now);
+            osc.frequency.linearRampToValueAtTime(30, now + 0.25);
+            
+            gain.gain.setValueAtTime(0.35, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+            
+            // Distort slightly to make it sound heavier
+            const dist = this.ctx.createWaveShaper();
+            dist.curve = makeDistortionCurve(70);
+            
             osc.connect(gain);
-            gain.connect(this.ctx.destination);
+            gain.connect(dist);
+            dist.connect(this.ctx.destination);
+            
             osc.start(now);
-            osc.stop(now + 0.2);
+            osc.stop(now + 0.25);
         } catch(e) {}
     }
 
@@ -478,19 +722,54 @@ class RetroAudio {
         if (!this.ctx) return;
         try {
             const now = this.ctx.currentTime;
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(2500, now);
-            osc.frequency.linearRampToValueAtTime(800, now + 0.15);
-            gain.gain.setValueAtTime(0.08, now);
-            gain.gain.exponentialRampToValueAtTime(0.005, now + 0.15);
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(now);
-            osc.stop(now + 0.15);
+            
+            // High frequency glass shattering crash noise
+            const bufferSize = this.ctx.sampleRate * 0.15;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(4500, now);
+            filter.frequency.exponentialRampToValueAtTime(2500, now + 0.15);
+            
+            const gainNoise = this.ctx.createGain();
+            gainNoise.gain.setValueAtTime(0.3, now);
+            gainNoise.gain.exponentialRampToValueAtTime(0.005, now + 0.15);
+            
+            noise.connect(filter);
+            filter.connect(gainNoise);
+            gainNoise.connect(this.ctx.destination);
+
+            // Shard tinkles (multiple high pitch oscillators decaying)
+            const numTinkles = 3;
+            const freqs = [3200, 3900, 4700];
+            freqs.forEach((freq, idx) => {
+                const tTime = now + (idx * 0.015);
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, tTime);
+                osc.frequency.linearRampToValueAtTime(freq - 800, tTime + 0.25);
+                
+                gain.gain.setValueAtTime(0.18, tTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, tTime + 0.25);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(tTime);
+                osc.stop(tTime + 0.25);
+            });
+            
+            noise.start(now);
         } catch(e) {}
     }
+}
 }
 
 const gameAudio = new RetroAudio();
@@ -1396,7 +1675,11 @@ class RetroGameController {
             return; // skip close range check since we threw a blade!
         }
         
-        gameAudio.playPunch();
+        if (type === 'kick') {
+            gameAudio.playKick();
+        } else {
+            gameAudio.playPunch();
+        }
 
         // Spawn a slice slash visual effect
         const hitX = this.player.x + (this.player.facing === 1 ? 55 : -15);
@@ -1418,7 +1701,7 @@ class RetroGameController {
 
             if (dist < range && yDist < 40 && correctDirection) {
                 // Slice Thug in half!
-                gameAudio.playSlice();
+                gameAudio.playSplatter();
                 this.player.score += 100;
                 this.screenShake = 6;
                 
@@ -1445,7 +1728,7 @@ class RetroGameController {
                 gameAudio.playPunch();
                 
                 if (dest.health <= 0) {
-                    gameAudio.playGlassShatter();
+                    gameAudio.playBreak();
                     // Spawn wooden shards
                     for (let k = 0; k < 6; k++) {
                         const angle = Math.random() * Math.PI * 2;
@@ -1492,7 +1775,7 @@ class RetroGameController {
                         this.player.state = 'victory';
                     }
                 } else {
-                    gameAudio.playSlice();
+                    gameAudio.playSplatter();
                     this.boss.vx = this.player.facing * 4; // knockback
                     this.boss.vy = -3;
                 }
@@ -1910,7 +2193,7 @@ class RetroGameController {
                     const dist = Math.abs(proj.x - (thug.x + thug.width/2));
                     const yDist = Math.abs(proj.y - (thug.y + thug.height/2));
                     if (dist < 25 && yDist < 40) {
-                        gameAudio.playSlice();
+                        gameAudio.playSplatter();
                         this.player.score += 150;
                         this.spawnGore(thug.x + thug.width/2, thug.y + thug.height/2, 'thug', thug.style);
                         this.thugs.splice(j, 1);
@@ -1926,7 +2209,7 @@ class RetroGameController {
                     if (dist < 30 && yDist < 50) {
                         this.boss.health--;
                         this.boss.flashTimer = 8;
-                        gameAudio.playSlice();
+                        gameAudio.playSplatter();
                         destroyed = true;
                         
                         if (this.boss.health <= 0) {
@@ -1956,7 +2239,7 @@ class RetroGameController {
                         gameAudio.playGlassShatter();
                         this.triggerPlayerHurt(15);
                     } else {
-                        gameAudio.playSlice();
+                        gameAudio.playSplatter();
                         this.triggerPlayerHurt(12);
                     }
                     destroyed = true;
@@ -3136,7 +3419,7 @@ class RetroGameController {
             this.ctx.save();
             this.ctx.translate(feetX, feetY);
             
-            const defaultFacing = (thug.style === 0 || thug.style === 2) ? -1 : 1;
+            const defaultFacing = 1;
             if (thug.facing !== defaultFacing) {
                 this.ctx.scale(-1, 1);
             }
@@ -3493,10 +3776,7 @@ class RetroGameController {
         if (sprite && sprite.loaded && this.sprites.craig_idle && this.sprites.craig_idle.loaded) {
             this.ctx.save();
             this.ctx.translate(feetX, feetY);
-            let defaultFacing = -1;
-            if (b.bossStyle === 'elder' || b.bossStyle === 'vigilante-clone' || b.bossStyle === 'dark-master') {
-                defaultFacing = 1;
-            }
+            const defaultFacing = 1;
             if (b.facing !== defaultFacing) {
                 this.ctx.scale(-1, 1);
             }
