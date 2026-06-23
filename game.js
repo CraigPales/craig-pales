@@ -190,12 +190,12 @@ class BloodParticle {
         this.life -= this.decay;
     }
 
-    draw(ctx) {
+    draw(ctx, scrollOffset) {
         ctx.save();
         ctx.globalAlpha = Math.max(0, this.life);
         ctx.fillStyle = this.color;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.arc(this.x - scrollOffset, this.y, this.size, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     }
@@ -221,7 +221,7 @@ class GoreParticle {
         this.life -= this.decay;
     }
 
-    draw(ctx) {
+    draw(ctx, scrollOffset) {
         ctx.save();
         ctx.globalAlpha = Math.max(0, this.life);
         ctx.fillStyle = this.color;
@@ -229,9 +229,9 @@ class GoreParticle {
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         // Draw a jagged, irregular triangle/shard shape
-        ctx.moveTo(this.x, this.y);
-        ctx.lineTo(this.x + this.size, this.y + this.size * 0.3);
-        ctx.lineTo(this.x + this.size * 0.3, this.y + this.size);
+        ctx.moveTo(this.x - scrollOffset, this.y);
+        ctx.lineTo(this.x - scrollOffset + this.size, this.y + this.size * 0.3);
+        ctx.lineTo(this.x - scrollOffset + this.size * 0.3, this.y + this.size);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
@@ -278,9 +278,9 @@ class SlicedDebris {
         this.life -= 0.008;
     }
 
-    draw(ctx) {
+    draw(ctx, scrollOffset) {
         ctx.save();
-        ctx.translate(this.x, this.y);
+        ctx.translate(this.x - scrollOffset, this.y);
         ctx.rotate(this.rotation);
         ctx.globalAlpha = Math.max(0, this.life);
 
@@ -383,9 +383,9 @@ class BottleProjectile {
         this.rotation += this.vRotation;
     }
 
-    draw(ctx) {
+    draw(ctx, scrollOffset) {
         ctx.save();
-        ctx.translate(this.x, this.y);
+        ctx.translate(this.x - scrollOffset, this.y);
         ctx.rotate(this.rotation);
         ctx.fillStyle = '#52b788'; // green glass
         ctx.strokeStyle = '#fff';
@@ -463,9 +463,9 @@ class KnifeProjectile {
         this.y += this.vy;
     }
 
-    draw(ctx) {
+    draw(ctx, scrollOffset) {
         ctx.save();
-        ctx.translate(this.x, this.y);
+        ctx.translate(this.x - scrollOffset, this.y);
         if (this.vx < 0) {
             ctx.scale(-1, 1);
         }
@@ -682,6 +682,8 @@ class RetroGameController {
             score: 0,
             attackType: '', // 'punch' or 'kick'
             knives: 0,
+            isDucking: false,
+            jumpsLeft: 2
         };
 
         this.groundY = 350;
@@ -726,9 +728,12 @@ class RetroGameController {
                 bossStyle: 'leather-red',
                 platforms: [
                     { x: 400, y: 280, w: 160, h: 16 },
-                    { x: 650, y: 200, w: 160, h: 16 },
-                    { x: 900, y: 280, w: 160, h: 16 },
-                    { x: 1300, y: 200, w: 240, h: 16 }
+                    { x: 480, y: 200, w: 160, h: 16 },
+                    { x: 560, y: 120, w: 160, h: 16 },
+                    { x: 1000, y: 280, w: 160, h: 16 },
+                    { x: 1080, y: 200, w: 160, h: 16 },
+                    { x: 1160, y: 120, w: 160, h: 16 },
+                    { x: 1500, y: 200, w: 240, h: 16 }
                 ],
                 destructibles: [
                     { x: 350, y: 314, type: 'crate', content: 'knife' },
@@ -744,10 +749,14 @@ class RetroGameController {
                 bossName: "Goon Master Craig Clones",
                 bossStyle: 'vigilante-clone',
                 platforms: [
-                    { x: 350, y: 270, w: 200, h: 16 },
-                    { x: 700, y: 190, w: 200, h: 16 },
-                    { x: 1050, y: 270, w: 200, h: 16 },
-                    { x: 1500, y: 190, w: 200, h: 16 }
+                    { x: 350, y: 280, w: 180, h: 16 },
+                    { x: 440, y: 200, w: 180, h: 16 },
+                    { x: 530, y: 120, w: 180, h: 16 },
+                    { x: 850, y: 200, w: 200, h: 16 },
+                    { x: 1200, y: 280, w: 180, h: 16 },
+                    { x: 1290, y: 200, w: 180, h: 16 },
+                    { x: 1380, y: 120, w: 180, h: 16 },
+                    { x: 1750, y: 200, w: 200, h: 16 }
                 ],
                 destructibles: [
                     { x: 500, y: 234, type: 'barrel', content: 'meat' },
@@ -763,11 +772,16 @@ class RetroGameController {
                 bossName: "The Dark Arts Master Craig",
                 bossStyle: 'dark-master',
                 platforms: [
-                    { x: 400, y: 280, w: 180, h: 16 },
-                    { x: 750, y: 200, w: 180, h: 16 },
-                    { x: 1100, y: 280, w: 180, h: 16 },
-                    { x: 1500, y: 200, w: 240, h: 16 },
-                    { x: 1900, y: 280, w: 180, h: 16 }
+                    { x: 300, y: 280, w: 160, h: 16 },
+                    { x: 380, y: 200, w: 160, h: 16 },
+                    { x: 460, y: 120, w: 160, h: 16 },
+                    { x: 900, y: 280, w: 160, h: 16 },
+                    { x: 980, y: 200, w: 160, h: 16 },
+                    { x: 1060, y: 120, w: 160, h: 16 },
+                    { x: 1500, y: 280, w: 160, h: 16 },
+                    { x: 1580, y: 200, w: 160, h: 16 },
+                    { x: 1660, y: 120, w: 160, h: 16 },
+                    { x: 2000, y: 200, w: 200, h: 16 }
                 ],
                 destructibles: [
                     { x: 450, y: 244, type: 'crate', content: 'meat' },
@@ -848,6 +862,52 @@ class RetroGameController {
         this.unbindVirtualButtons();
     }
 
+    triggerJump() {
+        if (this.gameState !== 'playing') return;
+        if (this.player.state === 'hurt' || this.player.state === 'victory') return;
+        
+        let playerOnGround = this.player.y >= this.groundY;
+        if (!playerOnGround) {
+            const pxLeft = this.player.x + 10;
+            const pxRight = this.player.x + this.player.width - 10;
+            for (const plat of this.platforms) {
+                const platScreenX = plat.x - this.scrollOffset;
+                if (pxRight > platScreenX && pxLeft < platScreenX + plat.w) {
+                    if (Math.abs((this.player.y + this.player.height) - plat.y) < 2) {
+                        playerOnGround = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (playerOnGround) {
+            this.player.vy = -11.5;
+            this.player.state = 'jumping';
+            this.player.jumpsLeft = 1;
+            gameAudio.playJump();
+        } else if (this.player.jumpsLeft > 0) {
+            this.player.vy = -10.5;
+            this.player.state = 'jumping';
+            this.player.jumpsLeft = 0;
+            gameAudio.playJump();
+
+            // Spawn smoke/dust particles
+            for (let i = 0; i < 8; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 0.5 + Math.random() * 2;
+                this.particles.push(new GoreParticle(
+                    this.player.x + this.player.width/2,
+                    this.player.y + this.player.height,
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed - 0.5,
+                    3 + Math.random() * 4,
+                    '#e2e8f0'
+                ));
+            }
+        }
+    }
+
     handleKeyDown(e) {
         gameAudio.init(); // enable sound on first interaction
         const code = e.code;
@@ -863,6 +923,10 @@ class RetroGameController {
         if (this.gameState === 'gameover' || this.gameState === 'victory') {
             this.resetGame();
             return;
+        }
+
+        if (code === 'KeyW' || code === 'ArrowUp' || code === 'Space') {
+            this.triggerJump();
         }
 
         if (code === 'KeyJ' || code === 'KeyZ') {
@@ -890,8 +954,9 @@ class RetroGameController {
         };
 
         bindBtn('btn-left', () => { this.keys['KeyA'] = true; this.keys['ArrowLeft'] = true; }, () => { this.keys['KeyA'] = false; this.keys['ArrowLeft'] = false; });
+        bindBtn('btn-duck', () => { this.keys['KeyS'] = true; this.keys['ArrowDown'] = true; }, () => { this.keys['KeyS'] = false; this.keys['ArrowDown'] = false; });
         bindBtn('btn-right', () => { this.keys['KeyD'] = true; this.keys['ArrowRight'] = true; }, () => { this.keys['KeyD'] = false; this.keys['ArrowRight'] = false; });
-        bindBtn('btn-jump', () => { this.keys['Space'] = true; }, () => { this.keys['Space'] = false; });
+        bindBtn('btn-jump', () => { this.triggerJump(); }, () => {});
         bindBtn('btn-punch', () => {
             if (this.gameState === 'gameover' || this.gameState === 'victory') {
                 this.resetGame();
@@ -958,7 +1023,7 @@ class RetroGameController {
             gameAudio.playSlice(); // throw knife sound
             const kVx = this.player.facing * 8.5;
             this.projectiles.push(new KnifeProjectile(
-                this.player.x + (this.player.facing === 1 ? 40 : 5),
+                this.player.x + (this.player.facing === 1 ? 40 : 5) + this.scrollOffset, // Spawn in world space
                 this.player.y + 30,
                 kVx,
                 0,
@@ -980,12 +1045,12 @@ class RetroGameController {
         // 1. Check thugs
         for (let i = this.thugs.length - 1; i >= 0; i--) {
             const thug = this.thugs[i];
-            const dist = Math.abs((this.player.x + this.player.width/2) - (thug.x + thug.width/2));
+            const dist = Math.abs((this.player.x + this.player.width/2) - (thug.x - this.scrollOffset + thug.width/2));
             const yDist = Math.abs(this.player.y - thug.y);
 
             // Facing correct direction check
-            const correctDirection = (this.player.facing === 1 && thug.x > this.player.x) ||
-                                     (this.player.facing === -1 && thug.x < this.player.x);
+            const correctDirection = (this.player.facing === 1 && (thug.x - this.scrollOffset) > this.player.x) ||
+                                     (this.player.facing === -1 && (thug.x - this.scrollOffset) < this.player.x);
 
             if (dist < range && yDist < 40 && correctDirection) {
                 // Slice Thug in half!
@@ -1017,7 +1082,16 @@ class RetroGameController {
                     gameAudio.playGlassShatter();
                     // Spawn wooden shards
                     for (let k = 0; k < 6; k++) {
-                        this.particles.push(new GoreParticle(dest.x + dest.width/2, dest.y + dest.height/2, '#a0522d'));
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = 1 + Math.random() * 3;
+                        this.particles.push(new GoreParticle(
+                            dest.x + dest.width/2,
+                            dest.y + dest.height/2,
+                            Math.cos(angle) * speed,
+                            Math.sin(angle) * speed - 1,
+                            3 + Math.random() * 4,
+                            '#a0522d'
+                        ));
                     }
                     // Spawn pickable item
                     this.items.push(new PickableItem(dest.x, dest.y, dest.content));
@@ -1028,10 +1102,10 @@ class RetroGameController {
 
         // 3. Check boss
         if (this.boss) {
-            const dist = Math.abs((this.player.x + this.player.width/2) - (this.boss.x + this.boss.width/2));
+            const dist = Math.abs((this.player.x + this.player.width/2) - (this.boss.x - this.scrollOffset + this.boss.width/2));
             const yDist = Math.abs(this.player.y - this.boss.y);
-            const correctDirection = (this.player.facing === 1 && this.boss.x > this.player.x) ||
-                                     (this.player.facing === -1 && this.boss.x < this.player.x);
+            const correctDirection = (this.player.facing === 1 && (this.boss.x - this.scrollOffset) > this.player.x) ||
+                                     (this.player.facing === -1 && (this.boss.x - this.scrollOffset) < this.player.x);
 
             if (dist < range + 20 && yDist < 50 && correctDirection) {
                 this.boss.health--;
@@ -1147,20 +1221,9 @@ class RetroGameController {
             this.player.facing = 1;
         }
 
-        if (this.player.state !== 'attacking' && this.player.state !== 'hurt') {
-            this.player.vx = moveInput * 4.5;
-            if (moveInput !== 0) {
-                this.player.state = (this.player.y < this.groundY) ? 'jumping' : 'walking';
-            } else {
-                this.player.state = (this.player.y < this.groundY) ? 'jumping' : 'idle';
-            }
-        }
-
-        // Jump Mechanics
-        const isJumpKey = this.keys['KeyW'] || this.keys['ArrowUp'] || this.keys['Space'];
+        // Ducking & Ground Check for Crouch
+        const isDuckKey = this.keys['KeyS'] || this.keys['ArrowDown'];
         let playerOnGround = this.player.y >= this.groundY;
-        
-        // Check if player is on any platform
         if (!playerOnGround) {
             const pxLeft = this.player.x + 10;
             const pxRight = this.player.x + this.player.width - 10;
@@ -1175,10 +1238,32 @@ class RetroGameController {
             }
         }
 
-        if (isJumpKey && playerOnGround && this.player.state !== 'hurt') {
-            this.player.vy = -11.5;
-            this.player.state = 'jumping';
-            gameAudio.playJump();
+        const wantsToDuck = isDuckKey && playerOnGround && this.player.state !== 'hurt';
+
+        if (wantsToDuck) {
+            if (!this.player.isDucking) {
+                this.player.isDucking = true;
+                this.player.y += 30;
+                this.player.height = 45;
+            }
+            this.player.vx = 0;
+            if (this.player.state !== 'attacking' && this.player.state !== 'hurt') {
+                this.player.state = 'ducking';
+            }
+        } else {
+            if (this.player.isDucking) {
+                this.player.isDucking = false;
+                this.player.y -= 30;
+                this.player.height = 75;
+            }
+            if (this.player.state !== 'attacking' && this.player.state !== 'hurt') {
+                this.player.vx = moveInput * 4.5;
+                if (moveInput !== 0) {
+                    this.player.state = (this.player.y < this.groundY) ? 'jumping' : 'walking';
+                } else {
+                    this.player.state = (this.player.y < this.groundY) ? 'jumping' : 'idle';
+                }
+            }
         }
 
         // Apply Gravity & Platform Landing Check
@@ -1214,6 +1299,7 @@ class RetroGameController {
         if (landed) {
             this.player.y = targetY;
             this.player.vy = 0;
+            this.player.jumpsLeft = 2; // Reset double jump
             if (this.player.state === 'jumping') {
                 this.player.state = 'idle';
             }
@@ -1252,7 +1338,7 @@ class RetroGameController {
                     // Spawn a thug from right edge
                     const isThrower = (this.currentLevel > 1 && Math.random() < 0.15 + this.currentLevel * 0.08);
                     this.thugs.push({
-                        x: 820,
+                        x: 820 + this.scrollOffset, // Spawn in world space
                         y: this.groundY,
                         width: 40,
                         height: 75,
@@ -1272,7 +1358,7 @@ class RetroGameController {
                 this.boss = {
                     name: lvlData.bossName,
                     style: lvlData.bossStyle,
-                    x: 820,
+                    x: 820 + this.scrollOffset, // Spawn in world space
                     y: this.groundY,
                     width: 55,
                     height: 95,
@@ -1346,7 +1432,7 @@ class RetroGameController {
                 }
             } else {
                 // Boss basic movement
-                const dir = (this.player.x - this.boss.x > 0) ? 1 : -1;
+                const dir = (this.player.x - (this.boss.x - this.scrollOffset) > 0) ? 1 : -1;
                 this.boss.x += dir * this.boss.speed;
                 this.boss.facing = dir;
             }
@@ -1394,7 +1480,7 @@ class RetroGameController {
             }
 
             // Contact damage with Boss
-            const dist = Math.abs((this.player.x + this.player.width/2) - (this.boss.x + this.boss.width/2));
+            const dist = Math.abs((this.player.x + this.player.width/2) - (this.boss.x - this.scrollOffset + this.boss.width/2));
             const yDist = Math.abs(this.player.y - this.boss.y);
             if (dist < 42 && yDist < 40 && this.player.state !== 'hurt' && this.player.state !== 'victory') {
                 this.triggerPlayerHurt(20);
@@ -1412,7 +1498,7 @@ class RetroGameController {
                 // Check thug hits
                 for (let j = this.thugs.length - 1; j >= 0; j--) {
                     const thug = this.thugs[j];
-                    const dist = Math.abs(proj.x - (thug.x - this.scrollOffset + thug.width/2));
+                    const dist = Math.abs(proj.x - (thug.x + thug.width/2));
                     const yDist = Math.abs(proj.y - (thug.y + thug.height/2));
                     if (dist < 25 && yDist < 40) {
                         gameAudio.playSlice();
@@ -1426,7 +1512,7 @@ class RetroGameController {
                 
                 // Check boss hits
                 if (!destroyed && this.boss) {
-                    const dist = Math.abs(proj.x - this.boss.x);
+                    const dist = Math.abs(proj.x - (this.boss.x + this.boss.width/2));
                     const yDist = Math.abs(proj.y - (this.boss.y + this.boss.height/2));
                     if (dist < 30 && yDist < 50) {
                         this.boss.health--;
@@ -1453,7 +1539,7 @@ class RetroGameController {
                 }
             } else {
                 // Enemy projectile hitting player
-                const dist = Math.abs(proj.x - (this.player.x + this.player.width/2));
+                const dist = Math.abs((proj.x - this.scrollOffset) - (this.player.x + this.player.width/2));
                 const yDist = Math.abs(proj.y - (this.player.y + this.player.height/2));
 
                 if (dist < 25 && yDist < 35 && this.player.state !== 'hurt' && this.player.state !== 'victory') {
@@ -1469,7 +1555,7 @@ class RetroGameController {
             }
 
             // Impact ground or out of bounds
-            if (!destroyed && (proj.y > this.groundY + 60 || proj.x < -100 || proj.x > 900)) {
+            if (!destroyed && (proj.y > this.groundY + 60 || proj.x - this.scrollOffset < -100 || proj.x - this.scrollOffset > 900)) {
                 if (proj instanceof BottleProjectile) {
                     gameAudio.playGlassShatter();
                 }
@@ -1569,7 +1655,7 @@ class RetroGameController {
         this.items.forEach(item => item.draw(this.ctx, this.scrollOffset));
 
         // Draw Debris (behind characters)
-        this.debris.forEach(d => d.draw(this.ctx));
+        this.debris.forEach(d => d.draw(this.ctx, this.scrollOffset));
 
         // Draw Thugs
         this.thugs.forEach(thug => this.drawThug(thug));
@@ -1581,13 +1667,13 @@ class RetroGameController {
         this.drawCraig();
 
         // Draw Projectiles
-        this.projectiles.forEach(p => p.draw(this.ctx));
+        this.projectiles.forEach(p => p.draw(this.ctx, this.scrollOffset));
 
         // Draw Slashes (on top)
         this.slashes.forEach(s => s.draw(this.ctx));
 
         // Draw Particles
-        this.particles.forEach(p => p.draw(this.ctx));
+        this.particles.forEach(p => p.draw(this.ctx, this.scrollOffset));
 
         // Draw UI Hud
         this.drawHUD();
@@ -2054,6 +2140,11 @@ class RetroGameController {
         this.ctx.save();
         this.ctx.translate(p.x, p.y);
         
+        // Squish character if ducking (height shrinks from 75 to 45)
+        if (p.isDucking) {
+            this.ctx.scale(1, 0.6);
+        }
+        
         // Apply sprite shaking if hurt
         if (p.state === 'hurt') {
             this.ctx.translate((Math.random() - 0.5) * 8, 0);
@@ -2474,7 +2565,7 @@ class RetroGameController {
 
     drawThug(thug) {
         this.ctx.save();
-        this.ctx.translate(thug.x, thug.y);
+        this.ctx.translate(thug.x - this.scrollOffset, thug.y);
 
         if (thug.facing === 1) {
             this.ctx.scale(-1, 1);
@@ -2793,7 +2884,7 @@ class RetroGameController {
     drawBoss() {
         const b = this.boss;
         this.ctx.save();
-        this.ctx.translate(b.x, b.y);
+        this.ctx.translate(b.x - this.scrollOffset, b.y);
 
         if (b.facing === 1) {
             this.ctx.scale(-1, 1);
