@@ -264,7 +264,6 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
             <rect x="0" y="315" width="400" height="10" fill="#4e3d30" stroke="#000" stroke-width="2"/>
         `;
     } else {
-        // Plain studio grey circle
         bgSvg = `
             <rect width="400" height="400" fill="#161a25"/>
             <circle cx="200" cy="200" r="160" fill="#1e2433"/>
@@ -383,28 +382,7 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
         `;
     }
 
-    // Outfit Colors
-    let robeColor = '#f37021'; // orange
-    let robeSecondary = '#e65c00';
-    let legColor = '#ffe3a8'; // bare legs
-    let sleeveColor = '#f37021';
-    let cuffColor = '#ffb703';
-
-    if (outfit === 'vigilante-outfit') {
-        robeColor = '#2f3e46'; // dark teal/grey hoodie
-        robeSecondary = '#1f292e';
-        legColor = '#354f52'; // dark trousers
-        sleeveColor = '#2f3e46';
-        cuffColor = '#52796f';
-    } else if (outfit === 'young-robe') {
-        robeColor = '#ffb703'; // lighter saffron orange for youth
-        robeSecondary = '#ff9f1c';
-        legColor = '#ffe3a8'; // bare legs
-        sleeveColor = '#ffb703';
-        cuffColor = '#ff9f1c';
-    }
-
-    // Aura Glow Filter
+    // Aura Glow Filter & Sparks
     let auraFilter = '';
     let fistGlow = '';
     if (aura === 'on') {
@@ -418,84 +396,209 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
         `;
     }
 
-    // Pose Parts
-    let leftArmSvg = `<path d="M 130 220 L 100 250 L 95 265" stroke="${sleeveColor}" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
-                      <circle cx="95" cy="265" r="15" fill="#f5cac3" stroke="#000" stroke-width="3" ${auraFilter}/>`;
-    
-    let rightArmSvg = `<path d="M 270 220 L 300 250 L 305 265" stroke="${sleeveColor}" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
-                       <circle cx="305" cy="265" r="15" fill="#f5cac3" stroke="#000" stroke-width="3" ${auraFilter}/>`;
-    
-    let torsoSvg = `<path d="M 130 200 L 270 200 L 280 320 L 120 320 Z" fill="${robeColor}" stroke="#000" stroke-width="4.5" />
-                    <!-- Monk sash / Hoodie zip -->
-                    ${outfit === 'monk-robe' ? 
-                      `<path d="M 200 200 L 200 320" stroke="#ffb703" stroke-width="12"/>` : 
-                      `<path d="M 200 200 L 200 320" stroke="#1f292e" stroke-width="6"/>`}`;
+    // Fills based on outfit
+    const backArmFill = (outfit === 'vigilante-outfit') ? 'url(#hoodieGrad)' : 'url(#skinGrad)';
+    const frontArmFill = (outfit === 'vigilante-outfit') ? 'url(#hoodieGrad)' : (outfit === 'young-robe' ? 'url(#youngGrad)' : 'url(#robeGrad)');
+    const torsoFill = (outfit === 'vigilante-outfit') ? 'url(#hoodieGrad)' : 'url(#skinGrad)';
+    const legFill = (outfit === 'vigilante-outfit') ? 'url(#hoodieGrad)' : (outfit === 'young-robe' ? 'url(#youngGrad)' : 'url(#pantsGrad)');
 
-    let legsSvg = `
-        <!-- Legs (Family Guy thick stubby legs) -->
-        <rect x="145" y="320" width="30" height="50" fill="${legColor}" stroke="#000" stroke-width="4"/>
-        <rect x="225" y="320" width="30" height="50" fill="${legColor}" stroke="#000" stroke-width="4"/>
-        <!-- Shoes -->
-        <path d="M 135 370 L 175 370 C 175 370 175 355 155 355 C 135 355 135 370 135 370 Z" fill="#2b2d42" stroke="#000" stroke-width="4"/>
-        <path d="M 225 370 L 265 370 C 265 370 265 355 245 355 C 225 355 225 370 225 370 Z" fill="#2b2d42" stroke="#000" stroke-width="4"/>
+    // 1. Torso & Sash
+    let torsoSvg = `
+        <!-- Torso base (bare muscular skin or hoodie) -->
+        <path d="M 140 120 L 260 120 L 250 240 L 150 240 Z" fill="${torsoFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
     `;
 
-    // Apply pose adjustments
-    if (pose === 'fighting') {
-        leftArmSvg = `
-            <!-- Left Guard arm -->
-            <path d="M 135 220 L 105 210 L 95 190" fill="none" stroke="${sleeveColor}" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
-            <circle cx="95" cy="190" r="16" fill="#f5cac3" stroke="#000" stroke-width="3" ${auraFilter}/>
+    if (outfit !== 'vigilante-outfit') {
+        // Detailed chest/ab muscles for bare skin
+        torsoSvg += `
+            <!-- Sternum line -->
+            <line x1="200" y1="145" x2="200" y2="220" stroke="#541c0e" stroke-width="2.5" stroke-linecap="round"/>
+            <!-- Bulging Pec shadow & lines (Craig's right, our left) -->
+            <path d="M 145 150 Q 175 185 200 180" fill="none" stroke="#541c0e" stroke-width="3" stroke-linecap="round"/>
+            <path d="M 150 145 Q 175 175 195 172" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.3" stroke-linecap="round"/>
+            <!-- Abdominal grids -->
+            <path d="M 160 200 Q 200 205 235 200" fill="none" stroke="#541c0e" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M 165 220 Q 200 225 230 220" fill="none" stroke="#541c0e" stroke-width="2.5" stroke-linecap="round"/>
+            <!-- Battle scar on chest -->
+            <path d="M 165 140 L 180 155 M 172 153 L 178 143" stroke="#b31a1a" stroke-width="2" stroke-linecap="round"/>
+            
+            <!-- Saffron robe covering left shoulder/chest (our right) with jagged tear -->
+            <path d="M 260 120 
+                     L 200 120 
+                     L 205 140 
+                     L 190 155 
+                     L 210 175 
+                     L 195 195 
+                     L 215 215 
+                     L 205 240 
+                     L 250 240 Z" fill="${frontArmFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
+            <!-- Robe creases -->
+            <path d="M 245 130 L 220 180" stroke="#672905" stroke-width="2.5" fill="none"/>
+            <path d="M 250 165 L 225 210" stroke="#672905" stroke-width="2.5" fill="none"/>
+            <path d="M 252 200 L 235 235" stroke="#672905" stroke-width="2.5" fill="none"/>
+            
+            <!-- Black Sash Belt -->
+            <rect x="145" y="240" width="110" height="15" fill="#111" stroke="#000" stroke-width="4" rx="3"/>
+            <!-- Hanging sash tails -->
+            <path d="M 180 255 L 175 300 L 165 295 L 172 255 Z" fill="#111" stroke="#000" stroke-width="3"/>
+            <path d="M 190 255 L 195 315 L 182 312 L 182 255 Z" fill="#111" stroke="#000" stroke-width="3"/>
         `;
-        rightArmSvg = `
-            <!-- Right punching arm -->
-            <path d="M 265 220 L 310 215 L 340 220" fill="none" stroke="${sleeveColor}" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
-            <circle cx="340" cy="220" r="16" fill="#f5cac3" stroke="#000" stroke-width="3" ${auraFilter}/>
-        `;
-    } else if (pose === 'victory') {
-        leftArmSvg = `
-            <path d="M 130 220 L 100 250 L 95 265" stroke="${sleeveColor}" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
-            <circle cx="95" cy="265" r="15" fill="#f5cac3" stroke="#000" stroke-width="3"/>
-        `;
-        rightArmSvg = `
-            <!-- Hand high up in the air -->
-            <path d="M 270 220 L 290 160 L 290 120" fill="none" stroke="${sleeveColor}" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
-            <circle cx="290" cy="115" r="16" fill="#f5cac3" stroke="#000" stroke-width="3" ${auraFilter}/>
+    } else {
+        // Zipped hoodie overlay
+        torsoSvg += `
+            <path d="M 200 120 L 200 240" stroke="#1c2429" stroke-width="3"/>
+            <!-- Black Sash Belt (Hoodie band) -->
+            <rect x="145" y="240" width="110" height="15" fill="#1f292e" stroke="#000" stroke-width="4" rx="3"/>
         `;
     }
 
-    // Expressions components
-    let mouthSvg = `<path d="M 185 140 Q 200 150 215 140" fill="none" stroke="#000" stroke-width="3.5" stroke-linecap="round"/>`; // Calm smile
+    // 2. Arms (left = back, right = front)
+    let leftArmSvg = ''; 
+    let rightArmSvg = ''; 
+
+    // Back arm (our left)
+    if (pose === 'fighting') {
+        // Punching arm extending forward (cross punch)
+        leftArmSvg = `
+            <!-- Outer stroke for back arm punching -->
+            <path d="M 130 140 L 210 142 L 280 140" fill="none" stroke="#000" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Inner fill -->
+            <path d="M 130 140 L 210 142 L 280 140" fill="none" stroke="${backArmFill}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Fist -->
+            <circle cx="282" cy="140" r="11" fill="url(#skinGrad)" stroke="#000" stroke-width="4" ${auraFilter}/>
+        `;
+        if (outfit !== 'vigilante-outfit') {
+            leftArmSvg += `
+                <!-- Bicep vein for bare punching arm -->
+                <path d="M 140 137 Q 210 139 270 137" fill="none" stroke="#6b8e8f" stroke-width="1.8"/>
+            `;
+        }
+    } else if (pose === 'victory') {
+        // Back arm raised in victory
+        leftArmSvg = `
+            <!-- Outer stroke for back arm raised -->
+            <path d="M 130 140 L 120 90 L 115 50" fill="none" stroke="#000" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Inner fill -->
+            <path d="M 130 140 L 120 90 L 115 50" fill="none" stroke="${backArmFill}" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Fist -->
+            <circle cx="115" cy="46" r="11" fill="url(#skinGrad)" stroke="#000" stroke-width="4" ${auraFilter}/>
+        `;
+        if (outfit !== 'vigilante-outfit') {
+            leftArmSvg += `
+                <!-- Vein -->
+                <path d="M 126 130 L 118 85 L 114 55" fill="none" stroke="#6b8e8f" stroke-width="1.5"/>
+            `;
+        }
+    } else {
+        // Back arm hanging down
+        leftArmSvg = `
+            <!-- Outer stroke for back arm hanging -->
+            <path d="M 130 140 L 120 185 L 115 210" fill="none" stroke="#000" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Inner fill -->
+            <path d="M 130 140 L 120 185 L 115 210" fill="none" stroke="${backArmFill}" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Fist -->
+            <circle cx="115" cy="212" r="11" fill="url(#skinGrad)" stroke="#000" stroke-width="4"/>
+        `;
+        if (outfit !== 'vigilante-outfit') {
+            leftArmSvg += `
+                <!-- Vein -->
+                <path d="M 128 140 Q 120 170 117 195" fill="none" stroke="#6b8e8f" stroke-width="1.5" stroke-linecap="round"/>
+            `;
+        }
+    }
+
+    // Front arm (our right)
+    if (pose === 'fighting') {
+        // Front arm (sleeved) guarding at chest
+        rightArmSvg = `
+            <!-- Outer stroke for front arm guard -->
+            <path d="M 270 140 L 255 175 L 260 160" fill="none" stroke="#000" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Inner fill -->
+            <path d="M 270 140 L 255 175 L 260 160" fill="none" stroke="${frontArmFill}" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Hand -->
+            <circle cx="260" cy="155" r="9" fill="url(#skinGrad)" stroke="#000" stroke-width="3"/>
+        `;
+    } else {
+        // Front arm hanging down
+        rightArmSvg = `
+            <!-- Outer stroke for front arm hanging -->
+            <path d="M 270 140 L 285 190 L 280 215" fill="none" stroke="#000" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Inner fill -->
+            <path d="M 270 140 L 285 190 L 280 215" fill="none" stroke="${frontArmFill}" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Sleeve cuff line if not vigilante -->
+            ${outfit !== 'vigilante-outfit' ? `<ellipse cx="280" cy="215" rx="10" ry="4" fill="none" stroke="#000" stroke-width="3" transform="rotate(-10 280 215)"/>` : ''}
+            <!-- Hand -->
+            <circle cx="278" cy="225" r="9" fill="url(#skinGrad)" stroke="#000" stroke-width="4"/>
+        `;
+    }
+
+    // 3. Legs
+    let legsSvg = `
+        <!-- Left Leg (back) -->
+        <path d="M 150 255 L 190 255 L 180 340 L 140 340 Z" fill="${legFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
+        <!-- Right Leg (front) -->
+        <path d="M 210 255 L 250 255 L 260 340 L 220 340 Z" fill="${legFill}" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
+        
+        <!-- Leg wraps (gold wraps on shins, if not vigilante outfit) -->
+        ${outfit !== 'vigilante-outfit' ? `
+            <path d="M 140 340 L 180 340 L 175 365 L 145 365 Z" fill="#ffb703" stroke="#000" stroke-width="3.5" stroke-linejoin="round"/>
+            <path d="M 220 340 L 260 340 L 255 365 L 225 365 Z" fill="#ffb703" stroke="#000" stroke-width="3.5" stroke-linejoin="round"/>
+            <!-- wrap lines -->
+            <line x1="142" y1="348" x2="178" y2="348" stroke="#000" stroke-width="1.5"/>
+            <line x1="144" y1="356" x2="176" y2="356" stroke="#000" stroke-width="1.5"/>
+            <line x1="222" y1="348" x2="258" y2="348" stroke="#000" stroke-width="1.5"/>
+            <line x1="224" y1="356" x2="256" y2="356" stroke="#000" stroke-width="1.5"/>
+        ` : ''}
+
+        <!-- Shoes -->
+        <path d="M 145 365 C 145 365 140 380 160 380 C 180 380 175 365 175 365 Z" fill="#2b2d42" stroke="#000" stroke-width="4"/>
+        <path d="M 225 365 C 225 365 220 380 240 380 C 260 380 255 365 255 365 Z" fill="#2b2d42" stroke="#000" stroke-width="4"/>
+    `;
+
+    // 4. Expressions components
+    let mouthSvg = `<path d="M 192 87 Q 200 92 208 87" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round"/>`; // Calm smile
     let eyesSvg = `
-        <circle cx="180" cy="115" r="6" fill="#000"/>
-        <circle cx="220" cy="115" r="6" fill="#000"/>
+        <circle cx="189" cy="75" r="3.5" fill="#000"/>
+        <circle cx="211" cy="75" r="3.5" fill="#000"/>
     `;
     let eyebrowsSvg = `
-        <path d="M 170 102 L 190 104" stroke="#000" stroke-width="3" stroke-linecap="round"/>
-        <path d="M 210 104 L 230 102" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+        <path d="M 178 68 L 195 72" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+        <path d="M 222 68 L 205 72" stroke="#000" stroke-width="3" stroke-linecap="round"/>
     `;
 
     if (expression === 'determined') {
-        mouthSvg = `<line x1="185" y1="140" x2="215" y2="140" stroke="#000" stroke-width="4" stroke-linecap="round"/>`; // Grim straight line
+        mouthSvg = `
+            <!-- Grim gritting mouth -->
+            <rect x="190" y="84" width="20" height="9" fill="#fff" stroke="#000" stroke-width="2.5" rx="1"/>
+            <!-- Teeth grid lines -->
+            <line x1="190" y1="88" x2="210" y2="88" stroke="rgba(0,0,0,0.5)" stroke-width="1"/>
+            <line x1="195" y1="84" x2="195" y2="93" stroke="rgba(0,0,0,0.5)" stroke-width="1"/>
+            <line x1="200" y1="84" x2="200" y2="93" stroke="rgba(0,0,0,0.5)" stroke-width="1"/>
+            <line x1="205" y1="84" x2="205" y2="93" stroke="rgba(0,0,0,0.5)" stroke-width="1"/>
+        `;
         eyebrowsSvg = `
             <!-- Angled angry eyebrows -->
-            <path d="M 168 100 L 192 110" stroke="#000" stroke-width="4.5" stroke-linecap="round"/>
-            <path d="M 208 110 L 232 100" stroke="#000" stroke-width="4.5" stroke-linecap="round"/>
+            <path d="M 178 67 L 196 73" stroke="#000" stroke-width="4.5" stroke-linecap="round"/>
+            <path d="M 222 67 L 204 73" stroke="#000" stroke-width="4.5" stroke-linecap="round"/>
+            <!-- Brow shadow -->
+            <path d="M 180 73 L 220 73" stroke="rgba(84,28,14,0.4)" stroke-width="2"/>
         `;
     } else if (expression === 'fury') {
         mouthSvg = `
-            <!-- Open screaming mouth with teeth -->
-            <path d="M 182 135 Q 200 165 218 135 Z" fill="#990000" stroke="#000" stroke-width="3"/>
-            <path d="M 186 138 Q 200 144 214 138" stroke="#fff" stroke-width="3" fill="none"/>
+            <!-- Screaming open mouth with teeth -->
+            <path d="M 190 85 Q 200 102 210 85 Z" fill="#612a1c" stroke="#000" stroke-width="3"/>
+            <path d="M 192 86 Q 200 90 208 86" fill="none" stroke="#fff" stroke-width="2.5"/>
+            <path d="M 194 92 Q 200 90 206 92" fill="none" stroke="#fff" stroke-width="2"/>
         `;
         eyesSvg = `
             <!-- White glowing eyes with red outline -->
-            <circle cx="178" cy="115" r="9" fill="#fff" stroke="#e63946" stroke-width="3.5" ${auraFilter}/>
-            <circle cx="222" cy="115" r="9" fill="#fff" stroke="#e63946" stroke-width="3.5" ${auraFilter}/>
+            <path d="M 183 75 L 194 77 L 190 71 Z" fill="#fff" stroke="#e63946" stroke-width="2.5" ${auraFilter}/>
+            <path d="M 217 75 L 206 77 L 210 71 Z" fill="#fff" stroke="#e63946" stroke-width="2.5" ${auraFilter}/>
         `;
         eyebrowsSvg = `
-            <path d="M 166 96 L 194 114" stroke="#000" stroke-width="5" stroke-linecap="round"/>
-            <path d="M 206 114 L 234 96" stroke="#000" stroke-width="5" stroke-linecap="round"/>
+            <!-- Angled angry eyebrows -->
+            <path d="M 178 65 L 197 74" stroke="#000" stroke-width="5" stroke-linecap="round"/>
+            <path d="M 222 65 L 203 74" stroke="#000" stroke-width="5" stroke-linecap="round"/>
         `;
     }
 
@@ -504,7 +607,42 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
     if (outfit === 'vigilante-outfit') {
         hoodSvg = `
             <!-- Hood base behind head -->
-            <path d="M 140 160 C 130 100 270 100 260 160 C 275 180 270 205 260 210 L 140 210 C 130 205 125 180 140 160 Z" fill="${robeSecondary}" stroke="#000" stroke-width="4" />
+            <path d="M 165 75 C 160 35 240 35 235 75 C 248 90 240 108 235 112 L 165 112 C 160 108 152 90 165 75 Z" fill="url(#hoodieGrad)" stroke="#000" stroke-width="4" />
+        `;
+    }
+
+    // Assemble head and face components
+    let headGroupSvg = `
+        <!-- Bald head -->
+        <circle cx="200" cy="75" r="26" fill="url(#headGrad)" stroke="#000" stroke-width="4.5"/>
+        
+        <!-- Ears (if not vigilante) -->
+        ${outfit !== 'vigilante-outfit' ? `
+            <path d="M 174 75 C 170 70 170 85 174 80 Z" fill="url(#headGrad)" stroke="#000" stroke-width="4"/>
+            <path d="M 226 75 C 230 70 230 85 226 80 Z" fill="url(#headGrad)" stroke="#000" stroke-width="4"/>
+        ` : ''}
+        
+        <!-- Face details -->
+        ${eyesSvg}
+        ${eyebrowsSvg}
+        ${mouthSvg}
+        
+        <!-- Nose -->
+        <path d="M 200 74 L 197 81 L 202 81" fill="none" stroke="#541c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        
+        <!-- Scar under left eye (our right) -->
+        ${outfit !== 'young-robe' ? `<path d="M 211 79 L 213 86" stroke="#b31a1a" stroke-width="1.8" stroke-linecap="round"/>` : ''}
+        
+        <!-- Forehead wrinkles -->
+        ${outfit !== 'young-robe' ? `
+            <path d="M 194 62 L 199 64 M 201 62 L 206 61 M 196 66 L 204 66" stroke="rgba(0,0,0,0.5)" stroke-width="1.5"/>
+        ` : ''}
+    `;
+
+    if (outfit === 'vigilante-outfit') {
+        headGroupSvg += `
+            <!-- Hood opening framing face -->
+            <path d="M 174 75 C 174 52 226 52 226 75 C 226 95 210 105 200 105 C 190 105 174 95 174 75 Z" fill="none" stroke="#000" stroke-width="4"/>
         `;
     }
 
@@ -512,9 +650,34 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
     const svgContent = `
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="${width}" height="${height}">
             <defs>
-                <style>
-                    .black-outline { stroke: #000; stroke-width: 4.5; stroke-linejoin: round; }
-                </style>
+                <linearGradient id="skinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#ffdfd3"/>
+                    <stop offset="50%" stop-color="#cf7a5c"/>
+                    <stop offset="100%" stop-color="#612a1c"/>
+                </linearGradient>
+                <linearGradient id="robeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#d97332"/>
+                    <stop offset="60%" stop-color="#a24a15"/>
+                    <stop offset="100%" stop-color="#672905"/>
+                </linearGradient>
+                <radialGradient id="headGrad" cx="35%" cy="35%" r="65%">
+                    <stop offset="0%" stop-color="#ffdfd3"/>
+                    <stop offset="50%" stop-color="#cf7a5c"/>
+                    <stop offset="100%" stop-color="#612a1c"/>
+                </radialGradient>
+                <linearGradient id="pantsGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#d97332"/>
+                    <stop offset="100%" stop-color="#672905"/>
+                </linearGradient>
+                <linearGradient id="youngGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#ffb703"/>
+                    <stop offset="100%" stop-color="#e29578"/>
+                </linearGradient>
+                <linearGradient id="hoodieGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#4f5d65"/>
+                    <stop offset="60%" stop-color="#2f3e46"/>
+                    <stop offset="100%" stop-color="#151b1f"/>
+                </linearGradient>
             </defs>
             
             <!-- Background Scenery -->
@@ -533,21 +696,7 @@ function generateCraigSVG(config, width = "100%", height = "100%") {
                 
                 <!-- Head group -->
                 <g id="head-group">
-                    <!-- Family Guy Style big round head -->
-                    <circle cx="200" cy="130" r="45" fill="#f5cac3" stroke="#000" stroke-width="4.5" />
-                    <!-- Ears (simple circles) -->
-                    <circle cx="152" cy="130" r="10" fill="#f5cac3" stroke="#000" stroke-width="4.5" />
-                    <circle cx="248" cy="130" r="10" fill="#f5cac3" stroke="#000" stroke-width="4.5" />
-                    <!-- Ear inner detail -->
-                    <path d="M 152 126 A 4 4 0 0 0 152 134" stroke="#000" stroke-width="2.5" fill="none"/>
-                    <path d="M 248 126 A 4 4 0 0 1 248 134" stroke="#000" stroke-width="2.5" fill="none"/>
-                    
-                    <!-- Facial Features -->
-                    ${eyesSvg}
-                    ${eyebrowsSvg}
-                    ${mouthSvg}
-                    <!-- Nose (classic L-shape) -->
-                    <path d="M 200 120 L 204 130 L 198 132" fill="none" stroke="#000" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    ${headGroupSvg}
                 </g>
 
                 <!-- Energy Sparks overlay -->
