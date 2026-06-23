@@ -12,105 +12,7 @@ function floodFillChromaKey(img, keyColor = {r: 0, g: 0, b: 0}, tolerance = 50) 
     tempCanvas.height = height;
     const tempCtx = tempCanvas.getContext('2d');
     tempCtx.drawImage(img, 0, 0);
-    
-    if (width === 0 || height === 0) return tempCanvas;
-    
-    try {
-        const imgData = tempCtx.getImageData(0, 0, width, height);
-        const data = imgData.data;
-        
-        // BFS queue and visited array to clean background black
-        const visited = new Uint8Array(width * height);
-        const queue = [];
-        
-        // Seed from all edges to clean the background black padding
-        for (let x = 0; x < width; x++) {
-            let idx = x;
-            visited[idx] = 1;
-            queue.push(idx);
-            
-            idx = (height - 1) * width + x;
-            visited[idx] = 1;
-            queue.push(idx);
-        }
-        for (let y = 1; y < height - 1; y++) {
-            let idx = y * width;
-            visited[idx] = 1;
-            queue.push(idx);
-            
-            idx = y * width + (width - 1);
-            visited[idx] = 1;
-            queue.push(idx);
-        }
-        
-        const tolSq = tolerance * tolerance;
-        
-        let qHead = 0;
-        while (qHead < queue.length) {
-            const currIdx = queue[qHead++];
-            const currX = currIdx % width;
-            const currY = Math.floor(currIdx / width);
-            
-            const r = data[currIdx * 4];
-            const g = data[currIdx * 4 + 1];
-            const b = data[currIdx * 4 + 2];
-            const a = data[currIdx * 4 + 3];
-            
-            const distSq = (r - keyColor.r) * (r - keyColor.r) +
-                           (g - keyColor.g) * (g - keyColor.g) +
-                           (b - keyColor.b) * (b - keyColor.b);
-            
-            if (a === 0 || distSq < tolSq) {
-                data[currIdx * 4 + 3] = 0; // Transparent
-                
-                const n1 = currIdx + 1;
-                if (currX < width - 1 && !visited[n1]) { visited[n1] = 1; queue.push(n1); }
-                
-                const n2 = currIdx - 1;
-                if (currX > 0 && !visited[n2]) { visited[n2] = 1; queue.push(n2); }
-                
-                const n3 = currIdx + width;
-                if (currY < height - 1 && !visited[n3]) { visited[n3] = 1; queue.push(n3); }
-                
-                const n4 = currIdx - width;
-                if (currY > 0 && !visited[n4]) { visited[n4] = 1; queue.push(n4); }
-            }
-        }
-        
-        // Post-process: clean up dark border pixels (anti-aliasing halo residue)
-        const borderPixels = [];
-        for (let y = 1; y < height - 1; y++) {
-            for (let x = 1; x < width - 1; x++) {
-                const idx = y * width + x;
-                if (data[idx * 4 + 3] > 0) {
-                    const n1 = idx + 1;
-                    const n2 = idx - 1;
-                    const n3 = idx + width;
-                    const n4 = idx - width;
-                    
-                    if (data[n1 * 4 + 3] === 0 || data[n2 * 4 + 3] === 0 || data[n3 * 4 + 3] === 0 || data[n4 * 4 + 3] === 0) {
-                        const r = data[idx * 4];
-                        const g = data[idx * 4 + 1];
-                        const b = data[idx * 4 + 2];
-                        const distSq = (r - keyColor.r) * (r - keyColor.r) +
-                                       (g - keyColor.g) * (g - keyColor.g) +
-                                       (b - keyColor.b) * (b - keyColor.b);
-                        if (distSq < 2025) { // 45^2
-                            borderPixels.push(idx);
-                        }
-                    }
-                }
-            }
-        }
-        for (const idx of borderPixels) {
-            data[idx * 4 + 3] = 0;
-        }
-        
-        tempCtx.putImageData(imgData, 0, 0);
-    } catch (e) {
-        console.warn("Flood fill chroma key failed (CORS/context):", e);
-    }
-    return tempCanvas;
+    return tempCanvas; // Preserve clean disk transparency directly
 }
 
 function trimCanvasSimple(canvas) {
@@ -145,32 +47,6 @@ function trimCanvasSimple(canvas) {
         if (!found) {
             return canvas;
         }
-        
-        // Shadow cropping: scan from maxY upwards
-        let feetY = maxY;
-        for (let y = maxY; y > minY; y--) {
-            let hasRealFootPixel = false;
-            for (let x = minX; x <= maxX; x++) {
-                const idx = (y * width + x) * 4;
-                const a = data[idx + 3];
-                if (a > 0) {
-                    const r = data[idx];
-                    const g = data[idx + 1];
-                    const b = data[idx + 2];
-                    const distSq = r * r + g * g + b * b;
-                    // If the pixel is brighter than dark black shadow (75^2), it's a real foot pixel!
-                    if (distSq > 5625) {
-                        hasRealFootPixel = true;
-                        break;
-                    }
-                }
-            }
-            if (hasRealFootPixel) {
-                feetY = y;
-                break;
-            }
-        }
-        maxY = feetY;
         
         const trimWidth = maxX - minX + 1;
         const trimHeight = maxY - minY + 1;
@@ -207,8 +83,6 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
         if (spriteObj.loaded) return;
         if (img.naturalWidth === 0 || img.naturalHeight === 0) return;
         
-        // Use appropriate key color and tolerance:
-        // Crouch has a white background, others have black
         let keyColorVal = keyColor;
         let tolVal = tolerance;
         if (src.includes('craig_crouch')) {
@@ -220,27 +94,32 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
         }
         
         const transparentCanvas = floodFillChromaKey(img, keyColorVal, tolVal);
-        
         const isMultiFrame = src.includes('craig_walk') || src.includes('thug_afro') || src.includes('thug_leather');
         
         if (isMultiFrame) {
             const w = transparentCanvas.width;
             const h = transparentCanvas.height;
-            const colW = Math.floor(w / 3);
+            
+            // Use centered windows of width 260 at centers 171, 512, and 853
+            // to crop the frames cleanly without including overlapping hands/legs of adjacent poses.
+            const centers = [171, 512, 853];
+            const cropW = 260;
+            const halfCrop = 130;
             
             const frames = [];
             for (let i = 0; i < 3; i++) {
                 const colCanvas = document.createElement('canvas');
-                colCanvas.width = colW;
+                colCanvas.width = cropW;
                 colCanvas.height = h;
                 const colCtx = colCanvas.getContext('2d');
-                colCtx.drawImage(transparentCanvas, i * colW, 0, colW, h, 0, 0, colW, h);
+                
+                const sx = Math.max(0, centers[i] - halfCrop);
+                colCtx.drawImage(transparentCanvas, sx, 0, cropW, h, 0, 0, cropW, h);
                 
                 const trimmedCol = trimCanvasSimple(colCanvas);
                 frames.push(trimmedCol);
             }
             
-            // Middle frame as the default stance
             spriteObj.canvas = frames[1];
             spriteObj.walkFrames = frames;
         } else {
@@ -299,7 +178,7 @@ class RetroAudio {
                 this.ctx.resume();
             }
             if (!this.distCurve) {
-                this.distCurve = makeDistortionCurve(80);
+                this.distCurve = makeDistortionCurve(160); // Heavy saturation
             }
         } catch (e) {
             console.warn("Audio Context init blocked or failed:", e);
@@ -337,28 +216,27 @@ class RetroAudio {
             oscSwoosh.type = 'triangle';
             oscSwoosh.frequency.setValueAtTime(600, now);
             oscSwoosh.frequency.exponentialRampToValueAtTime(180, now + 0.08);
-            gainSwoosh.gain.setValueAtTime(0.08, now);
+            gainSwoosh.gain.setValueAtTime(0.12, now);
             gainSwoosh.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
             oscSwoosh.connect(gainSwoosh);
             gainSwoosh.connect(this.ctx.destination);
             oscSwoosh.start(now);
             oscSwoosh.stop(now + 0.08);
 
-            // Smack impact (20ms delay)
             const hitTime = now + 0.02;
             
-            // Meaty low thud
+            // 1. Meaty low thud
             const oscThud = this.ctx.createOscillator();
             const gainThud = this.ctx.createGain();
             oscThud.type = 'sine';
-            oscThud.frequency.setValueAtTime(160, hitTime);
-            oscThud.frequency.exponentialRampToValueAtTime(45, hitTime + 0.12);
-            gainThud.gain.setValueAtTime(0.35, hitTime);
-            gainThud.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.12);
+            oscThud.frequency.setValueAtTime(180, hitTime);
+            oscThud.frequency.exponentialRampToValueAtTime(45, hitTime + 0.15);
+            gainThud.gain.setValueAtTime(0.65, hitTime);
+            gainThud.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.15);
             oscThud.connect(gainThud);
 
-            // Saturated slap noise
-            const bufferSize = this.ctx.sampleRate * 0.08;
+            // 2. High frequency CRACK/SNAP element
+            const bufferSize = this.ctx.sampleRate * 0.1;
             const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < bufferSize; i++) {
@@ -369,33 +247,34 @@ class RetroAudio {
 
             const filter = this.ctx.createBiquadFilter();
             filter.type = 'bandpass';
-            filter.frequency.setValueAtTime(1400, hitTime);
-            filter.Q.value = 3.0;
+            filter.frequency.setValueAtTime(2500, hitTime);
+            filter.frequency.exponentialRampToValueAtTime(600, hitTime + 0.08);
+            filter.Q.value = 6.0;
 
             const gainNoise = this.ctx.createGain();
-            gainNoise.gain.setValueAtTime(0.45, hitTime);
+            gainNoise.gain.setValueAtTime(0.8, hitTime);
             gainNoise.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.08);
             
             noise.connect(filter);
             filter.connect(gainNoise);
 
-            // Distortion for punchy clipping crunch
+            // 3. Distortion wave shaper
             const dist = this.ctx.createWaveShaper();
-            dist.curve = makeDistortionCurve(100);
+            dist.curve = makeDistortionCurve(160);
             dist.oversample = '4x';
             
             gainThud.connect(dist);
             gainNoise.connect(dist);
 
             const finalGain = this.ctx.createGain();
-            finalGain.gain.setValueAtTime(0.7, hitTime);
-            finalGain.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.15);
+            finalGain.gain.setValueAtTime(1.1, hitTime);
+            finalGain.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.18);
             
             dist.connect(finalGain);
             finalGain.connect(this.ctx.destination);
 
             oscThud.start(hitTime);
-            oscThud.stop(hitTime + 0.12);
+            oscThud.stop(hitTime + 0.15);
             noise.start(hitTime);
         } catch(e) {}
     }
@@ -412,28 +291,27 @@ class RetroAudio {
             oscSwoosh.type = 'triangle';
             oscSwoosh.frequency.setValueAtTime(450, now);
             oscSwoosh.frequency.exponentialRampToValueAtTime(110, now + 0.12);
-            gainSwoosh.gain.setValueAtTime(0.12, now);
+            gainSwoosh.gain.setValueAtTime(0.18, now);
             gainSwoosh.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
             oscSwoosh.connect(gainSwoosh);
             gainSwoosh.connect(this.ctx.destination);
             oscSwoosh.start(now);
             oscSwoosh.stop(now + 0.12);
 
-            // Very heavy impact (30ms delay)
             const hitTime = now + 0.03;
             
-            // Sub-bass heavy thud
+            // 1. Sub-bass heavy thud (pounding)
             const oscThud = this.ctx.createOscillator();
             const gainThud = this.ctx.createGain();
             oscThud.type = 'sine';
-            oscThud.frequency.setValueAtTime(120, hitTime);
-            oscThud.frequency.exponentialRampToValueAtTime(35, hitTime + 0.18);
-            gainThud.gain.setValueAtTime(0.45, hitTime);
-            gainThud.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.18);
+            oscThud.frequency.setValueAtTime(110, hitTime);
+            oscThud.frequency.exponentialRampToValueAtTime(30, hitTime + 0.22);
+            gainThud.gain.setValueAtTime(0.85, hitTime);
+            gainThud.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.22);
             oscThud.connect(gainThud);
 
-            // Saturated bass slap noise
-            const bufferSize = this.ctx.sampleRate * 0.12;
+            // 2. Heavy crunch noise
+            const bufferSize = this.ctx.sampleRate * 0.15;
             const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < bufferSize; i++) {
@@ -444,33 +322,34 @@ class RetroAudio {
 
             const filter = this.ctx.createBiquadFilter();
             filter.type = 'bandpass';
-            filter.frequency.setValueAtTime(800, hitTime);
-            filter.Q.value = 2.0;
+            filter.frequency.setValueAtTime(900, hitTime);
+            filter.frequency.exponentialRampToValueAtTime(200, hitTime + 0.12);
+            filter.Q.value = 3.5;
 
             const gainNoise = this.ctx.createGain();
-            gainNoise.gain.setValueAtTime(0.5, hitTime);
-            gainNoise.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.1);
+            gainNoise.gain.setValueAtTime(0.85, hitTime);
+            gainNoise.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.12);
             
             noise.connect(filter);
             filter.connect(gainNoise);
 
-            // Heavier distortion curves for kicks
+            // 3. Distortion wave shaper
             const dist = this.ctx.createWaveShaper();
-            dist.curve = makeDistortionCurve(140);
+            dist.curve = makeDistortionCurve(180); // max saturated crunch
             dist.oversample = '4x';
             
             gainThud.connect(dist);
             gainNoise.connect(dist);
 
             const finalGain = this.ctx.createGain();
-            finalGain.gain.setValueAtTime(0.8, hitTime);
-            finalGain.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.22);
+            finalGain.gain.setValueAtTime(1.3, hitTime);
+            finalGain.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.25);
             
             dist.connect(finalGain);
             finalGain.connect(this.ctx.destination);
 
             oscThud.start(hitTime);
-            oscThud.stop(hitTime + 0.18);
+            oscThud.stop(hitTime + 0.22);
             noise.start(hitTime);
         } catch(e) {}
     }
@@ -480,7 +359,6 @@ class RetroAudio {
         if (!this.ctx) return;
         try {
             const now = this.ctx.currentTime;
-            // Throw knife swoosh sound: high-pitch bandpass noise sweep
             const bufferSize = this.ctx.sampleRate * 0.12;
             const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
             const data = buffer.getChannelData(0);
@@ -517,52 +395,55 @@ class RetroAudio {
             const oscSlice = this.ctx.createOscillator();
             const gainSlice = this.ctx.createGain();
             oscSlice.type = 'sawtooth';
-            oscSlice.frequency.setValueAtTime(800, now);
-            oscSlice.frequency.exponentialRampToValueAtTime(120, now + 0.08);
-            gainSlice.gain.setValueAtTime(0.2, now);
-            gainSlice.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+            oscSlice.frequency.setValueAtTime(1000, now);
+            oscSlice.frequency.exponentialRampToValueAtTime(80, now + 0.12);
+            gainSlice.gain.setValueAtTime(0.4, now);
+            gainSlice.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
             oscSlice.connect(gainSlice);
             
             // Wet noise splatter (squeezing blood splatter)
-            const bufferSize = this.ctx.sampleRate * 0.15;
+            const bufferSize = this.ctx.sampleRate * 0.25;
             const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
             const data = buffer.getChannelData(0);
+            // Add amplitude modulation to simulate wet splattering chunks!
             for (let i = 0; i < bufferSize; i++) {
-                data[i] = Math.random() * 2 - 1;
+                const t = i / this.ctx.sampleRate;
+                const am = Math.sin(t * 120.0) * 0.4 + 0.6;
+                data[i] = (Math.random() * 2 - 1) * am;
             }
             const noise = this.ctx.createBufferSource();
             noise.buffer = buffer;
 
             const filter = this.ctx.createBiquadFilter();
             filter.type = 'bandpass';
-            filter.frequency.setValueAtTime(2200, now);
-            filter.frequency.exponentialRampToValueAtTime(250, now + 0.15);
+            filter.frequency.setValueAtTime(3000, now);
+            filter.frequency.exponentialRampToValueAtTime(150, now + 0.22);
             filter.Q.value = 4.0;
 
             const gainNoise = this.ctx.createGain();
-            gainNoise.gain.setValueAtTime(0.55, now);
-            gainNoise.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+            gainNoise.gain.setValueAtTime(0.95, now);
+            gainNoise.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
             
             noise.connect(filter);
             filter.connect(gainNoise);
 
             // Saturated distortion
             const dist = this.ctx.createWaveShaper();
-            dist.curve = makeDistortionCurve(120);
+            dist.curve = makeDistortionCurve(160);
             dist.oversample = '4x';
             
             gainSlice.connect(dist);
             gainNoise.connect(dist);
 
             const finalGain = this.ctx.createGain();
-            finalGain.gain.setValueAtTime(0.75, now);
-            finalGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+            finalGain.gain.setValueAtTime(1.1, now);
+            finalGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
             
             dist.connect(finalGain);
             finalGain.connect(this.ctx.destination);
 
             oscSlice.start(now);
-            oscSlice.stop(now + 0.08);
+            oscSlice.stop(now + 0.12);
             noise.start(now);
         } catch(e) {}
     }
@@ -579,12 +460,12 @@ class RetroAudio {
             oscImpact.type = 'sawtooth';
             oscImpact.frequency.setValueAtTime(180, now);
             oscImpact.frequency.exponentialRampToValueAtTime(50, now + 0.2);
-            gainImpact.gain.setValueAtTime(0.35, now);
+            gainImpact.gain.setValueAtTime(0.55, now);
             gainImpact.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
             oscImpact.connect(gainImpact);
 
             // Cracking wood noise sweeps
-            const bufferSize = this.ctx.sampleRate * 0.22;
+            const bufferSize = this.ctx.sampleRate * 0.25;
             const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < bufferSize; i++) {
@@ -595,47 +476,47 @@ class RetroAudio {
 
             const filter = this.ctx.createBiquadFilter();
             filter.type = 'bandpass';
-            filter.frequency.setValueAtTime(900, now);
-            filter.frequency.exponentialRampToValueAtTime(150, now + 0.22);
-            filter.Q.value = 1.5;
+            filter.frequency.setValueAtTime(1200, now);
+            filter.frequency.exponentialRampToValueAtTime(100, now + 0.25);
+            filter.Q.value = 2.0;
 
             const gainNoise = this.ctx.createGain();
-            gainNoise.gain.setValueAtTime(0.6, now);
-            gainNoise.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+            gainNoise.gain.setValueAtTime(0.85, now);
+            gainNoise.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
 
             noise.connect(filter);
             filter.connect(gainNoise);
 
             // Wood splintering cracking pulses (multiple sweeps)
-            const numSplinters = 4;
+            const numSplinters = 5;
             for (let i = 0; i < numSplinters; i++) {
-                const spTime = now + 0.01 + (i * 0.035);
+                const spTime = now + 0.01 + (i * 0.03);
                 const oscSp = this.ctx.createOscillator();
                 const gainSp = this.ctx.createGain();
                 oscSp.type = 'triangle';
-                oscSp.frequency.setValueAtTime(3500 - (i * 600), spTime);
-                oscSp.frequency.exponentialRampToValueAtTime(1000 - (i * 200), spTime + 0.018);
+                oscSp.frequency.setValueAtTime(4500 - (i * 800), spTime);
+                oscSp.frequency.exponentialRampToValueAtTime(800 - (i * 150), spTime + 0.02);
                 
-                gainSp.gain.setValueAtTime(0.25, spTime);
-                gainSp.gain.exponentialRampToValueAtTime(0.001, spTime + 0.018);
+                gainSp.gain.setValueAtTime(0.4, spTime);
+                gainSp.gain.exponentialRampToValueAtTime(0.001, spTime + 0.02);
                 
                 oscSp.connect(gainSp);
                 gainSp.connect(this.ctx.destination);
                 oscSp.start(spTime);
-                oscSp.stop(spTime + 0.018);
+                oscSp.stop(spTime + 0.02);
             }
 
             // Distort the main thud and cracking noise
             const dist = this.ctx.createWaveShaper();
-            dist.curve = makeDistortionCurve(110);
+            dist.curve = makeDistortionCurve(160);
             dist.oversample = '4x';
             
             gainImpact.connect(dist);
             gainNoise.connect(dist);
 
             const finalGain = this.ctx.createGain();
-            finalGain.gain.setValueAtTime(0.85, now);
-            finalGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+            finalGain.gain.setValueAtTime(1.2, now);
+            finalGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
             
             dist.connect(finalGain);
             finalGain.connect(this.ctx.destination);
@@ -651,25 +532,18 @@ class RetroAudio {
         if (!this.ctx) return;
         try {
             const now = this.ctx.currentTime;
-            
-            // Low-end heavy chest blow thud
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
             osc.type = 'sawtooth';
             osc.frequency.setValueAtTime(100, now);
             osc.frequency.linearRampToValueAtTime(30, now + 0.25);
-            
             gain.gain.setValueAtTime(0.35, now);
             gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-            
-            // Distort slightly to make it sound heavier
             const dist = this.ctx.createWaveShaper();
             dist.curve = makeDistortionCurve(70);
-            
             osc.connect(gain);
             gain.connect(dist);
             dist.connect(this.ctx.destination);
-            
             osc.start(now);
             osc.stop(now + 0.25);
         } catch(e) {}
@@ -722,8 +596,6 @@ class RetroAudio {
         if (!this.ctx) return;
         try {
             const now = this.ctx.currentTime;
-            
-            // High frequency glass shattering crash noise
             const bufferSize = this.ctx.sampleRate * 0.15;
             const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
             const data = buffer.getChannelData(0);
@@ -746,7 +618,6 @@ class RetroAudio {
             filter.connect(gainNoise);
             gainNoise.connect(this.ctx.destination);
 
-            // Shard tinkles (multiple high pitch oscillators decaying)
             const numTinkles = 3;
             const freqs = [3200, 3900, 4700];
             freqs.forEach((freq, idx) => {
@@ -766,6 +637,98 @@ class RetroAudio {
                 osc.stop(tTime + 0.25);
             });
             
+            noise.start(now);
+        } catch(e) {}
+    }
+
+    playCharge(progress) {
+        this.init();
+        if (!this.ctx) return;
+        try {
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            osc.type = 'sine';
+            const freq = 180 + progress * 420;
+            osc.frequency.setValueAtTime(freq, now);
+            
+            gain.gain.setValueAtTime(0.04 + Math.sin(now * 30) * 0.02, now);
+            gain.connect(this.ctx.destination);
+            osc.connect(gain);
+            osc.start(now);
+            osc.stop(now + 0.06);
+        } catch(e) {}
+    }
+
+    playPowerMove() {
+        this.init();
+        if (!this.ctx) return;
+        try {
+            const now = this.ctx.currentTime;
+            
+            // 1. Massive sub-bass boom
+            const oscBoom = this.ctx.createOscillator();
+            const gainBoom = this.ctx.createGain();
+            oscBoom.type = 'sine';
+            oscBoom.frequency.setValueAtTime(140, now);
+            oscBoom.frequency.exponentialRampToValueAtTime(25, now + 0.45);
+            gainBoom.gain.setValueAtTime(1.2, now);
+            gainBoom.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+            oscBoom.connect(gainBoom);
+            
+            // 2. High-energy explosion noise
+            const bufferSize = this.ctx.sampleRate * 0.5;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(1600, now);
+            filter.frequency.exponentialRampToValueAtTime(80, now + 0.35);
+
+            const gainNoise = this.ctx.createGain();
+            gainNoise.gain.setValueAtTime(1.4, now);
+            gainNoise.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+            
+            noise.connect(filter);
+            filter.connect(gainNoise);
+
+            // 3. Shockwave crack
+            const oscCrack = this.ctx.createOscillator();
+            const gainCrack = this.ctx.createGain();
+            oscCrack.type = 'sawtooth';
+            oscCrack.frequency.setValueAtTime(380, now);
+            oscCrack.frequency.exponentialRampToValueAtTime(60, now + 0.18);
+            gainCrack.gain.setValueAtTime(0.85, now);
+            gainCrack.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+            oscCrack.connect(gainCrack);
+
+            // Saturate everything
+            const dist = this.ctx.createWaveShaper();
+            dist.curve = makeDistortionCurve(220); // Massive blowout
+            dist.oversample = '4x';
+            
+            gainBoom.connect(dist);
+            gainNoise.connect(dist);
+            gainCrack.connect(dist);
+
+            const finalGain = this.ctx.createGain();
+            finalGain.gain.setValueAtTime(1.5, now);
+            finalGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+            
+            dist.connect(finalGain);
+            finalGain.connect(this.ctx.destination);
+
+            oscBoom.start(now);
+            oscBoom.stop(now + 0.45);
+            oscCrack.start(now);
+            oscCrack.stop(now + 0.18);
             noise.start(now);
         } catch(e) {}
     }
@@ -1096,6 +1059,73 @@ class KnifeProjectile {
     }
 }
 
+class PowerWaveProjectile {
+    constructor(x, y, vx, vy, isPlayerOwned = true, type = 'punch') {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.isPlayerOwned = isPlayerOwned;
+        this.type = type; // 'punch' (slash) or 'kick' (hurricane)
+        this.width = type === 'punch' ? 50 : 80;
+        this.height = type === 'punch' ? 110 : 80;
+        this.age = 0;
+        this.maxAge = 50; // lasts slightly under 1 second
+        this.hits = new Set(); // track which enemies/objects we've hit
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.age++;
+    }
+
+    draw(ctx, scrollOffset) {
+        ctx.save();
+        ctx.translate(this.x - scrollOffset, this.y + 35); // Center on player vertical
+        if (this.vx < 0) {
+            ctx.scale(-1, 1);
+        }
+        ctx.shadowBlur = 20;
+        
+        if (this.type === 'punch') {
+            ctx.shadowColor = '#d946ef';
+            ctx.fillStyle = 'rgba(168, 85, 247, 0.85)';
+            
+            // Draw a massive crescent blade wave
+            ctx.beginPath();
+            ctx.arc(0, 0, 60, -Math.PI / 2.5, Math.PI / 2.5);
+            ctx.quadraticCurveTo(25, 0, 30, -Math.PI / 2.5);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3.5;
+            ctx.stroke();
+        } else {
+            ctx.shadowColor = '#fbbf24';
+            ctx.fillStyle = 'rgba(249, 115, 22, 0.85)';
+            
+            // Draw a massive fiery hurricane ring spinner
+            const rot = performance.now() * 0.03;
+            ctx.rotate(rot);
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, 50, 0, Math.PI * 2);
+            ctx.lineWidth = 14;
+            ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, 32, 0, Math.PI * 2);
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+}
+
 // Destructible Crates / Barrels
 class DestructibleObject {
     constructor(x, y, type = 'crate', content = 'knife') {
@@ -1302,6 +1332,14 @@ class RetroGameController {
         this.particles = [];
         this.debris = [];
         this.slashes = [];
+        
+        // Power move state & Ki Energy bar properties
+        this.power = 100;
+        this.maxPower = 100;
+        this.powerChargeRate = 0.15; // charges Ki Bar slowly
+        this.chargeTimer = 0;
+        this.isChargingPowerMove = false;
+        this.chargeType = ''; // 'punch' or 'kick'
         
         // Level definition data
         this.currentLevel = 1;
@@ -1566,14 +1604,78 @@ class RetroGameController {
         }
 
         if (code === 'KeyJ' || code === 'KeyZ') {
-            this.triggerAttack('punch');
+            this.startCharging('punch');
         } else if (code === 'KeyK' || code === 'KeyX') {
-            this.triggerAttack('kick');
+            this.startCharging('kick');
         }
     }
 
     handleKeyUp(e) {
         this.keys[e.code] = false;
+        if (e.code === 'KeyJ' || e.code === 'KeyZ') {
+            this.releaseCharge('punch');
+        } else if (e.code === 'KeyK' || e.code === 'KeyX') {
+            this.releaseCharge('kick');
+        }
+    }
+
+    startCharging(type) {
+        if (this.player.state === 'hurt' || this.gameState !== 'playing') return;
+        this.isChargingPowerMove = true;
+        this.chargeType = type;
+        this.chargeTimer = 0;
+        
+        // Instant attack on press (responsive input)
+        this.triggerAttack(type);
+    }
+
+    releaseCharge(type) {
+        if (!this.isChargingPowerMove || this.chargeType !== type) return;
+        
+        const secondsHeld = this.chargeTimer / 60; // Assumes 60fps update loop
+        
+        // If held down for at least 1.0 seconds, and we have enough power (>= 35)
+        if (secondsHeld >= 1.0 && this.power >= 35) {
+            this.triggerPowerMove(type);
+        }
+        
+        this.isChargingPowerMove = false;
+        this.chargeType = '';
+        this.chargeTimer = 0;
+    }
+
+    triggerPowerMove(type) {
+        if (this.player.state === 'hurt' || this.player.state === 'victory') return;
+        
+        this.power = Math.max(0, this.power - 35);
+        this.player.state = 'attacking';
+        this.player.attackType = type;
+        this.player.stateTimer = 15; // Power attack animation lasts 15 frames
+        
+        gameAudio.playPowerMove();
+        this.screenShake = 12;
+        
+        // Spawn the massive shockwave projectile
+        const pVx = this.player.facing * 8.5;
+        const px = this.player.x + (this.player.facing === 1 ? 55 : -25) + this.scrollOffset;
+        const py = this.player.y;
+        
+        this.projectiles.push(new PowerWaveProjectile(
+            px,
+            py,
+            pVx,
+            0,
+            true, // isPlayerOwned = true
+            type
+        ));
+        
+        // Spawn a blast slash visual effect fan
+        for (let i = 0; i < 3; i++) {
+            const offset = (i - 1) * 25;
+            const hitX = this.player.x + (this.player.facing === 1 ? 65 : -25);
+            const hitY = this.player.y + 35 + offset;
+            this.slashes.push(new SliceSlashEffect(hitX, hitY, type === 'kick'));
+        }
     }
 
     bindVirtualButtons() {
@@ -1607,8 +1709,10 @@ class RetroGameController {
             } else if (this.gameState === 'levelclear') {
                 this.advanceLevel();
             } else {
-                this.triggerAttack('punch');
+                this.startCharging('punch');
             }
+        }, () => {
+            this.releaseCharge('punch');
         });
         bindBtn(['btn-kick', 'mobile-btn-kick'], () => {
             if (this.gameState === 'gameover' || this.gameState === 'victory') {
@@ -1616,8 +1720,10 @@ class RetroGameController {
             } else if (this.gameState === 'levelclear') {
                 this.advanceLevel();
             } else {
-                this.triggerAttack('kick');
+                this.startCharging('kick');
             }
+        }, () => {
+            this.releaseCharge('kick');
         });
 
         // Fullscreen Toggle Click Binding
@@ -1889,6 +1995,18 @@ class RetroGameController {
             this.debris.forEach(d => d.update());
             return;
         }
+
+        // Handle Power Move Ki charging
+        if (this.isChargingPowerMove) {
+            this.chargeTimer++;
+            const progress = Math.min(1.0, this.chargeTimer / 60);
+            if (this.chargeTimer % 6 === 0) {
+                gameAudio.playCharge(progress);
+            }
+        }
+
+        // Slowly recharge Ki power bar
+        this.power = Math.min(this.maxPower, this.power + this.powerChargeRate);
 
         // --- Player Controls & Physics ---
         if (this.player.isDucking) {
@@ -2214,7 +2332,7 @@ class RetroGameController {
             }
         }
 
-        // Update Projectiles (bottles/knives)
+        // Update Projectiles (bottles/knives/power-waves)
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const proj = this.projectiles[i];
             proj.update();
@@ -2222,45 +2340,129 @@ class RetroGameController {
             let destroyed = false;
 
             if (proj.isPlayerOwned) {
-                // Check thug hits
-                for (let j = this.thugs.length - 1; j >= 0; j--) {
-                    const thug = this.thugs[j];
-                    const dist = Math.abs(proj.x - (thug.x + thug.width/2));
-                    const yDist = Math.abs(proj.y - (thug.y + thug.height/2));
-                    if (dist < 25 && yDist < 40) {
-                        gameAudio.playSplatter();
-                        this.player.score += 150;
-                        this.spawnGore(thug.x + thug.width/2, thug.y + thug.height/2, 'thug', thug.style);
-                        this.thugs.splice(j, 1);
-                        destroyed = true;
-                        break;
-                    }
-                }
-                
-                // Check boss hits
-                if (!destroyed && this.boss) {
-                    const dist = Math.abs(proj.x - (this.boss.x + this.boss.width/2));
-                    const yDist = Math.abs(proj.y - (this.boss.y + this.boss.height/2));
-                    if (dist < 30 && yDist < 50) {
-                        this.boss.health--;
-                        this.boss.flashTimer = 8;
-                        gameAudio.playSplatter();
-                        destroyed = true;
+                if (proj instanceof PowerWaveProjectile) {
+                    // Check thug hits (penetrates multiple thugs)
+                    for (let j = this.thugs.length - 1; j >= 0; j--) {
+                        const thug = this.thugs[j];
+                        if (proj.hits.has(thug)) continue;
                         
-                        if (this.boss.health <= 0) {
-                            gameAudio.playVictory();
-                            this.spawnGore(this.boss.x + this.boss.width/2, this.boss.y + this.boss.height/2, 'boss');
-                            this.boss = null;
-                            if (this.currentLevel === 4) {
-                                this.gameState = 'victory';
-                                this.player.state = 'victory';
+                        const dist = Math.abs(proj.x - (thug.x + thug.width/2));
+                        const yDist = Math.abs(proj.y + 35 - (thug.y + thug.height/2));
+                        
+                        if (dist < 45 && yDist < 50) {
+                            proj.hits.add(thug);
+                            gameAudio.playSplatter();
+                            this.player.score += 200;
+                            this.spawnGore(thug.x + thug.width/2, thug.y + thug.height/2, 'thug', thug.style);
+                            this.thugs.splice(j, 1);
+                            this.screenShake = Math.max(this.screenShake, 8);
+                        }
+                    }
+                    
+                    // Check boss hits
+                    if (this.boss && !proj.hits.has(this.boss)) {
+                        const dist = Math.abs(proj.x - (this.boss.x + this.boss.width/2));
+                        const yDist = Math.abs(proj.y + 35 - (this.boss.y + this.boss.height/2));
+                        if (dist < 50 && yDist < 60) {
+                            proj.hits.add(this.boss);
+                            this.boss.health -= 2.5; // High damage!
+                            this.boss.flashTimer = 8;
+                            gameAudio.playSplatter();
+                            this.screenShake = Math.max(this.screenShake, 10);
+                            
+                            if (this.boss.health <= 0) {
+                                gameAudio.playVictory();
+                                this.spawnGore(this.boss.x + this.boss.width/2, this.boss.y + this.boss.height/2, 'boss');
+                                this.boss = null;
+                                if (this.currentLevel === 4) {
+                                    this.gameState = 'victory';
+                                    this.player.state = 'victory';
+                                } else {
+                                    this.gameState = 'levelclear';
+                                    this.player.state = 'victory';
+                                }
                             } else {
-                                this.gameState = 'levelclear';
-                                this.player.state = 'victory';
+                                this.boss.vx = proj.vx * 0.45; // push boss back
+                                this.boss.vy = -3;
                             }
-                        } else {
-                            this.boss.vx = this.player.facing * 3;
-                            this.boss.vy = -2.5;
+                        }
+                    }
+
+                    // Check destructibles
+                    for (let j = this.destructibles.length - 1; j >= 0; j--) {
+                        const dest = this.destructibles[j];
+                        if (proj.hits.has(dest)) continue;
+                        
+                        const dist = Math.abs(proj.x - (dest.x + dest.width/2));
+                        const yDist = Math.abs(proj.y + 35 - (dest.y + dest.height/2));
+                        if (dist < 40 && yDist < 50) {
+                            proj.hits.add(dest);
+                            dest.health -= 2;
+                            dest.flashTimer = 8;
+                            gameAudio.playPunch();
+                            if (dest.health <= 0) {
+                                gameAudio.playBreak();
+                                for (let k = 0; k < 6; k++) {
+                                    const angle = Math.random() * Math.PI * 2;
+                                    const speed = 1 + Math.random() * 3;
+                                    this.particles.push(new GoreParticle(
+                                        dest.x + dest.width/2,
+                                        dest.y + dest.height/2,
+                                        Math.cos(angle) * speed,
+                                        Math.sin(angle) * speed - 1,
+                                        3 + Math.random() * 4,
+                                        '#a0522d'
+                                    ));
+                                }
+                                this.items.push(new PickableItem(dest.x, dest.y, dest.content));
+                                this.destructibles.splice(j, 1);
+                            }
+                        }
+                    }
+                    
+                    if (proj.age > proj.maxAge) {
+                        destroyed = true;
+                    }
+                } else {
+                    // Regular player projectile (knife)
+                    for (let j = this.thugs.length - 1; j >= 0; j--) {
+                        const thug = this.thugs[j];
+                        const dist = Math.abs(proj.x - (thug.x + thug.width/2));
+                        const yDist = Math.abs(proj.y - (thug.y + thug.height/2));
+                        if (dist < 25 && yDist < 40) {
+                            gameAudio.playSplatter();
+                            this.player.score += 150;
+                            this.spawnGore(thug.x + thug.width/2, thug.y + thug.height/2, 'thug', thug.style);
+                            this.thugs.splice(j, 1);
+                            destroyed = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!destroyed && this.boss) {
+                        const dist = Math.abs(proj.x - (this.boss.x + this.boss.width/2));
+                        const yDist = Math.abs(proj.y - (this.boss.y + this.boss.height/2));
+                        if (dist < 30 && yDist < 50) {
+                            this.boss.health--;
+                            this.boss.flashTimer = 8;
+                            gameAudio.playSplatter();
+                            destroyed = true;
+                            
+                            if (this.boss.health <= 0) {
+                                gameAudio.playVictory();
+                                this.spawnGore(this.boss.x + this.boss.width/2, this.boss.y + this.boss.height/2, 'boss');
+                                this.boss = null;
+                                if (this.currentLevel === 4) {
+                                    this.gameState = 'victory';
+                                    this.player.state = 'victory';
+                                } else {
+                                    this.gameState = 'levelclear';
+                                    this.player.state = 'victory';
+                                }
+                            } else {
+                                this.boss.vx = this.player.facing * 3;
+                                this.boss.vy = -2.5;
+                            }
                         }
                     }
                 }
@@ -2980,6 +3182,35 @@ class RetroGameController {
             const drawW = sprite.canvas.width * baseScale;
             const drawH = sprite.canvas.height * baseScale;
             
+            // Draw charging visual aura glow / rising sparks
+            if (this.isChargingPowerMove && this.chargeTimer > 10) {
+                const progress = Math.min(1.0, this.chargeTimer / 60);
+                this.ctx.save();
+                this.ctx.globalAlpha = 0.45 + Math.sin(performance.now() * 0.025) * 0.25;
+                this.ctx.shadowColor = this.chargeType === 'punch' ? '#d946ef' : '#fbbf24';
+                this.ctx.shadowBlur = 15 + progress * 20;
+                
+                // Ring aura at feet
+                this.ctx.strokeStyle = this.chargeType === 'punch' ? '#8b5cf6' : '#f97316';
+                this.ctx.lineWidth = 4 + progress * 6;
+                this.ctx.beginPath();
+                this.ctx.arc(0, -drawH / 2, 45 + progress * 15, 0, Math.PI * 2);
+                this.ctx.stroke();
+                
+                // Rising particles
+                this.ctx.fillStyle = '#ffffff';
+                const time = performance.now() * 0.004;
+                for (let k = 0; k < 6; k++) {
+                    const sparkX = Math.sin(time + k * 1.2) * 35;
+                    const sparkY = -drawH * ((time * 0.4 + k * 0.18) % 1.0);
+                    const r = 2.5 + progress * 3;
+                    this.ctx.beginPath();
+                    this.ctx.arc(sparkX, sparkY, r, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+                this.ctx.restore();
+            }
+
             // Draw aura glow shadow effect behind Craig (at exact size to avoid white borders)
             this.ctx.save();
             this.ctx.shadowColor = '#a855f7';
@@ -3954,47 +4185,83 @@ class RetroGameController {
         this.ctx.font = '700 12px "Outfit", sans-serif';
         this.ctx.fillText(`🗡️ KNIVES: ${this.player.knives}`, 30, 85);
 
-        // 2. Top Right Panel: Glassmorphism Card (Player Health)
+        // 2. Top Right Panel: Glassmorphism Card (Player Health & Ki Power)
         this.ctx.fillStyle = 'rgba(10, 15, 30, 0.75)';
         this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
         this.ctx.lineWidth = 1.5;
         this.ctx.beginPath();
-        this.ctx.roundRect(565, 15, 220, 50, [10]);
+        this.ctx.roundRect(565, 15, 220, 80, [10]);
         this.ctx.fill();
         this.ctx.stroke();
 
         this.ctx.fillStyle = '#ffffff';
         this.ctx.font = '800 11px "Outfit", sans-serif';
-        this.ctx.fillText("VIGILANTE STATUS: CRAIG PALES", 580, 32);
+        this.ctx.fillText("VIGILANTE STATUS: CRAIG PALES", 580, 30);
 
-        // Health Bar Track
+        // --- HEALTH BAR ---
+        // Track
         this.ctx.fillStyle = 'rgba(230, 57, 70, 0.15)';
         this.ctx.beginPath();
-        this.ctx.roundRect(580, 40, 190, 12, [6]);
+        this.ctx.roundRect(580, 36, 190, 10, [5]);
         this.ctx.fill();
 
-        // Health Bar Fill (Gradient)
+        // Fill
         if (this.player.health > 0) {
             const healthGrad = this.ctx.createLinearGradient(580, 0, 770, 0);
             healthGrad.addColorStop(0, '#c2410c'); // Deep orange-red
             healthGrad.addColorStop(1, '#ef4444'); // Bright neon red
             this.ctx.fillStyle = healthGrad;
             
-            // Health Glow
             this.ctx.shadowColor = '#ef4444';
             this.ctx.shadowBlur = 4;
             
             this.ctx.beginPath();
-            this.ctx.roundRect(580, 40, 190 * (this.player.health / 100), 12, [6]);
+            this.ctx.roundRect(580, 36, 190 * (this.player.health / 100), 10, [5]);
             this.ctx.fill();
-            
-            this.ctx.shadowBlur = 0; // Reset shadow
+            this.ctx.shadowBlur = 0; // Reset
         }
         
         this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
         this.ctx.lineWidth = 1;
         this.ctx.beginPath();
-        this.ctx.roundRect(580, 40, 190, 12, [6]);
+        this.ctx.roundRect(580, 36, 190, 10, [5]);
+        this.ctx.stroke();
+
+        // --- KI POWER BAR ---
+        // Label
+        this.ctx.fillStyle = '#a855f7'; // Purple-gold Ki power indicator
+        this.ctx.font = '800 10px "Outfit", sans-serif';
+        this.ctx.fillText(`KI ENERGY: ${Math.floor(this.power)}%`, 580, 60);
+
+        // Track
+        this.ctx.fillStyle = 'rgba(168, 85, 247, 0.15)';
+        this.ctx.beginPath();
+        this.ctx.roundRect(580, 66, 190, 10, [5]);
+        this.ctx.fill();
+
+        // Fill
+        if (this.power > 0) {
+            const powerGrad = this.ctx.createLinearGradient(580, 0, 770, 0);
+            powerGrad.addColorStop(0, '#8b5cf6'); // purple
+            powerGrad.addColorStop(1, '#d946ef'); // pink-fuchsia
+            this.ctx.fillStyle = powerGrad;
+            
+            // Glow if we have enough power to use a power move (>= 35)
+            if (this.power >= 35) {
+                this.ctx.shadowColor = '#d946ef';
+                this.ctx.shadowBlur = 5;
+            }
+            
+            this.ctx.beginPath();
+            this.ctx.roundRect(580, 66, 190 * (this.power / 100), 10, [5]);
+            this.ctx.fill();
+            this.ctx.shadowBlur = 0; // Reset
+        }
+
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.roundRect(580, 66, 190, 10, [5]);
         this.ctx.stroke();
 
         // 3. Boss Health Bar Overlay (Bottom Center - Cinematic Style)
