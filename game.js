@@ -2971,33 +2971,35 @@ class RetroGameController {
         // --- Enemies Spawning & Behavior ---
         
         // Spawn Regular Thugs
-        if (this.gameProgress < 1.0 && this.levelProgressed) {
-            this.thugSpawnTimer++;
-            if (this.thugSpawnTimer > 90) {
-                this.thugSpawnTimer = 0;
-                const aliveThugsCount = this.thugs.filter(t => t.state !== 'dead').length;
-                if (aliveThugsCount < 1) {
-                    // Spawn a thug from right edge
-                    const isThrower = (this.currentLevel > 1 && Math.random() < 0.15 + this.currentLevel * 0.08);
-                    this.thugs.push({
-                        x: 820 + this.scrollOffset, // Spawn in world space
-                        y: this.groundY,
-                        width: 40,
-                        height: 75,
-                        speed: 1.8 + Math.random() * 0.8,
-                        facing: -1,
-                        style: Math.floor(Math.random() * 5),
-                        isKnifeThrower: isThrower,
-                        throwCooldown: 40 + Math.random() * 60,
-                        health: 3,
-                        maxHealth: 3,
-                        vx: 0,
-                        vy: 0,
-                        state: 'normal',
-                        deadTimer: 0,
-                        alpha: 1.0,
-                        flashTimer: 0
-                    });
+        if (this.gameProgress < 1.0) {
+            if (this.levelProgressed) {
+                this.thugSpawnTimer++;
+                if (this.thugSpawnTimer > 90) {
+                    this.thugSpawnTimer = 0;
+                    const aliveThugsCount = this.thugs.filter(t => t.state !== 'dead').length;
+                    if (aliveThugsCount < 1) {
+                        // Spawn a thug from right edge
+                        const isThrower = (this.currentLevel > 1 && Math.random() < 0.15 + this.currentLevel * 0.08);
+                        this.thugs.push({
+                            x: 820 + this.scrollOffset, // Spawn in world space
+                            y: this.groundY,
+                            width: 40,
+                            height: 75,
+                            speed: 1.8 + Math.random() * 0.8,
+                            facing: -1,
+                            style: Math.floor(Math.random() * 5),
+                            isKnifeThrower: isThrower,
+                            throwCooldown: 40 + Math.random() * 60,
+                            health: 3,
+                            maxHealth: 3,
+                            vx: 0,
+                            vy: 0,
+                            state: 'normal',
+                            deadTimer: 0,
+                            alpha: 1.0,
+                            flashTimer: 0
+                        });
+                    }
                 }
             }
         } else {
