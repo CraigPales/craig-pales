@@ -67,12 +67,28 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
     
     const img = new Image();
     img.src = src;
+    
+    // Assign sheet-specific anchorY (baseline bottom-most Y pixel coordinate)
+    let anchorY = 985; // default for Craig idle/walks
+    if (src.includes('boss_sensei')) {
+        anchorY = 952;
+    } else if (src.includes('thug_leather')) {
+        anchorY = 970;
+    } else if (src.includes('craig_crouch')) {
+        anchorY = 1022;
+    } else if (src.includes('thug_afro') || src.includes('boss_slasher') || src.includes('craig_punch') || src.includes('craig_kick') || src.includes('craig_victory') || src.includes('craig_hurt')) {
+        anchorY = 1024;
+    } else if (src.includes('craig_jump')) {
+        anchorY = 979;
+    }
+    
     const spriteObj = {
         loaded: false,
         img: img,
         canvas: null,
         dataUrl: '',
-        walkFrames: []
+        walkFrames: [],
+        anchorY: anchorY
     };
     
     const processImage = () => {
@@ -96,43 +112,35 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
             const w = transparentCanvas.width;
             const h = transparentCanvas.height;
             
-            // Slicing 1024x1024 walk sheets using custom valley separation points to prevent limb cut-offs
-            let valleys = [250, 776]; // default
+            let centers = [171, 512, 853];
+            let cropW = 340;
             if (src.includes('thug_leather')) {
-                valleys = [210, 780];
-            } else if (src.includes('craig_walk2')) {
-                valleys = [250, 774];
-            } else if (src.includes('craig_walk')) {
-                valleys = [250, 779];
-            } else if (src.includes('thug_afro')) {
-                valleys = [253, 776];
+                centers = [365, 604, 912];
+                cropW = 250;
             }
             
             const frames = [];
             for (let i = 0; i < 3; i++) {
-                let startX = 0;
-                let endX = w;
-                if (i === 0) {
+                const center = centers[i];
+                let startX = Math.round(center - cropW / 2);
+                let endX = startX + cropW;
+                
+                if (startX < 0) {
                     startX = 0;
-                    endX = valleys[0];
-                } else if (i === 1) {
-                    startX = valleys[0];
-                    endX = valleys[1];
-                } else {
-                    startX = valleys[1];
-                    endX = w;
+                    endX = cropW;
                 }
-                const colW = endX - startX;
+                if (endX > w) {
+                    endX = w;
+                    startX = w - cropW;
+                }
                 
                 const colCanvas = document.createElement('canvas');
-                colCanvas.width = colW;
+                colCanvas.width = cropW;
                 colCanvas.height = h;
                 const colCtx = colCanvas.getContext('2d');
                 
-                colCtx.drawImage(transparentCanvas, startX, 0, colW, h, 0, 0, colW, h);
-                
-                const trimmedCol = trimCanvasSimple(colCanvas);
-                frames.push(trimmedCol);
+                colCtx.drawImage(transparentCanvas, startX, 0, cropW, h, 0, 0, cropW, h);
+                frames.push(colCanvas);
             }
             
             spriteObj.canvas = frames[1];
@@ -2000,7 +2008,40 @@ class RetroGameController {
         this.levelLength = data.length;
         this.scrollOffset = 0;
         this.gameProgress = 0;
-        this.boss = null;
+        
+        // Spawn Boss at the very end of the stage in world space
+        const maxHp = 5 + lvlNum * 2;
+        let bW = 55;
+        let bH = 95;
+        if (data.bossStyle === 'biker-boss') {
+            bW = 72;
+            bH = 100;
+        }
+        
+        // Align boss Y so feet are at ground level (this.groundY + 75)
+        const bossGroundY = this.groundY + 75 - bH;
+        
+        this.boss = {
+            name: data.bossName,
+            style: data.bossStyle,
+            bossStyle: data.bossStyle,
+            x: data.length + 650, // Positioned at the very end of the stage
+            y: bossGroundY,
+            width: bW,
+            height: bH,
+            speed: 1.0 + lvlNum * 0.1,
+            health: maxHp,
+            maxHealth: maxHp,
+            facing: -1,
+            throwTimer: 60,
+            flashTimer: 0,
+            vx: 0,
+            vy: 0,
+            punchTimer: 0,
+            punchCooldown: 0,
+            activated: false // Starts inactive
+        };
+
         this.thugs = [];
         this.projectiles = [];
         this.debris = [];
@@ -2457,7 +2498,7 @@ class RetroGameController {
         }
 
         // 3. Check boss
-        if (this.boss) {
+        if (this.boss && this.boss.activated) {
             const dist = Math.abs((this.player.x + this.player.width/2) - (this.boss.x - this.scrollOffset + this.boss.width/2));
             const yDist = Math.abs(this.player.y - this.boss.y);
             const correctDirection = (this.player.facing === 1 && (this.boss.x - this.scrollOffset) > this.player.x) ||
@@ -2850,35 +2891,9 @@ class RetroGameController {
                 }
             }
         } else {
-            // Level Scroll at 100%: Spawn Boss if not spawned yet
-            if (!this.boss && this.gameState === 'playing') {
-                const lvlData = this.levelData[this.currentLevel - 1];
-                const maxHp = 5 + this.currentLevel * 2;
-                let bW = 55;
-                let bH = 95;
-                if (lvlData.bossStyle === 'biker-boss') {
-                    bW = 72;
-                    bH = 100;
-                }
-                this.boss = {
-                    name: lvlData.bossName,
-                    style: lvlData.bossStyle,
-                    bossStyle: lvlData.bossStyle,
-                    x: 820 + this.scrollOffset, // Spawn in world space
-                    y: this.groundY,
-                    width: bW,
-                    height: bH,
-                    speed: 1.0 + this.currentLevel * 0.1,
-                    health: maxHp,
-                    maxHealth: maxHp,
-                    facing: -1,
-                    throwTimer: 60,
-                    flashTimer: 0,
-                    vx: 0,
-                    vy: 0,
-                    punchTimer: 0,
-                    punchCooldown: 0
-                };
+            // Level Scroll at 100%: Activate Boss if not activated yet
+            if (this.boss && !this.boss.activated && this.gameState === 'playing') {
+                this.boss.activated = true;
             }
         }
 
@@ -2947,114 +2962,124 @@ class RetroGameController {
 
         // Update Boss
         if (this.boss) {
-            // Boss pushes thugs away horizontally
-            for (const thug of this.thugs) {
-                const dx = thug.x - this.boss.x;
-                const dist = Math.abs(dx);
-                if (dist < 55) {
-                    const push = (dx >= 0 ? 1 : -1) * (55 - dist) * 0.6;
-                    thug.x += push;
-                }
+            // Activate the boss when the player has scrolled to the end of the level
+            if (!this.boss.activated && this.scrollOffset >= this.levelLength) {
+                this.boss.activated = true;
             }
 
-            // Apply physics to Boss for knockbacks
-            if (this.boss.vy !== 0 || this.boss.y < this.groundY) {
-                this.boss.vy += 0.5;
-                this.boss.y += this.boss.vy;
-                this.boss.x += this.boss.vx;
-                this.boss.vx *= 0.95;
-                this.boss.isWalking = false;
-
-                if (this.boss.y >= this.groundY) {
-                    this.boss.y = this.groundY;
-                    this.boss.vy = 0;
-                    this.boss.vx = 0;
+            if (this.boss.activated) {
+                // Boss pushes thugs away horizontally
+                for (const thug of this.thugs) {
+                    const dx = thug.x - this.boss.x;
+                    const dist = Math.abs(dx);
+                    if (dist < 55) {
+                        const push = (dx >= 0 ? 1 : -1) * (55 - dist) * 0.6;
+                        thug.x += push;
+                    }
                 }
-            } else {
-                // Boss basic movement
-                if (this.boss.punchTimer > 0) {
+
+                // Apply physics to Boss for knockbacks (feet aligned with Craig's feet)
+                const bossGroundY = this.groundY + 75 - this.boss.height;
+                if (this.boss.vy !== 0 || this.boss.y < bossGroundY) {
+                    this.boss.vy += 0.5;
+                    this.boss.y += this.boss.vy;
+                    this.boss.x += this.boss.vx;
+                    this.boss.vx *= 0.95;
                     this.boss.isWalking = false;
-                } else {
-                    const dir = (this.player.x - (this.boss.x - this.scrollOffset) > 0) ? 1 : -1;
-                    this.boss.x += dir * this.boss.speed;
-                    this.boss.facing = dir;
-                    this.boss.isWalking = true;
-                }
-            }
 
-            if (this.boss.flashTimer > 0) this.boss.flashTimer--;
-            if (this.boss.punchTimer > 0) this.boss.punchTimer--;
-            if (this.boss.punchCooldown > 0) this.boss.punchCooldown--;
-
-            // Boss attacks
-            this.boss.throwTimer--;
-            if (this.boss.throwTimer <= 0) {
-                this.boss.throwTimer = 110 + Math.random() * 60; // 2-3 seconds
-                const bVx = this.boss.facing * 6.5;
-                
-                if (this.boss.style === 'biker-boss') {
-                    // Biker Boss throws dual knives: one straight, one angled downwards!
-                    this.projectiles.push(new KnifeProjectile(
-                        this.boss.x + (this.boss.facing === 1 ? 65 : -15),
-                        this.boss.y + 30,
-                        bVx,
-                        0,
-                        false
-                    ));
-                    this.projectiles.push(new KnifeProjectile(
-                        this.boss.x + (this.boss.facing === 1 ? 65 : -15),
-                        this.boss.y + 30,
-                        bVx,
-                        1.0,
-                        false
-                    ));
-                } else if (this.boss.style === 'elder') {
-                    // Sensei throws a fast shuriken (using KnifeProjectile)
-                    this.projectiles.push(new KnifeProjectile(
-                        this.boss.x + (this.boss.facing === 1 ? 50 : -10),
-                        this.boss.y + 25,
-                        bVx * 1.2,
-                        0,
-                        false
-                    ));
-                } else if (this.boss.style === 'leather-red') {
-                    // Billy throws knives
-                    this.projectiles.push(new KnifeProjectile(
-                        this.boss.x + (this.boss.facing === 1 ? 50 : -10),
-                        this.boss.y + 25,
-                        bVx,
-                        0,
-                        false
-                    ));
-                } else if (this.boss.style === 'dark-master') {
-                    // Dark Master throws 3 knives spread shot!
-                    this.projectiles.push(new KnifeProjectile(this.boss.x + (this.boss.facing === 1 ? 50 : -10), this.boss.y + 25, bVx, -1.5, false));
-                    this.projectiles.push(new KnifeProjectile(this.boss.x + (this.boss.facing === 1 ? 50 : -10), this.boss.y + 25, bVx, 0, false));
-                    this.projectiles.push(new KnifeProjectile(this.boss.x + (this.boss.facing === 1 ? 50 : -10), this.boss.y + 25, bVx, 1.5, false));
-                } else {
-                    // Clone/default: throws bottles
-                    this.projectiles.push(new BottleProjectile(
-                        this.boss.x + (this.boss.facing === 1 ? 50 : -10),
-                        this.boss.y + 25,
-                        bVx,
-                        -3
-                    ));
-                }
-            }
-
-            // Contact damage / Punch with Boss
-            const dist = Math.abs((this.player.x + this.player.width/2) - (this.boss.x - this.scrollOffset + this.boss.width/2));
-            const yDist = Math.abs(this.player.y - this.boss.y);
-            if (dist < 60 && yDist < 40 && this.player.state !== 'hurt' && this.player.state !== 'victory') {
-                if (this.boss.style === 'biker-boss') {
-                    if (this.boss.punchCooldown <= 0) {
-                        this.boss.punchTimer = 15;
-                        this.boss.punchCooldown = 60; // 1 second cooldown
-                        this.triggerPlayerHurt(25, this.boss.facing * 16.0, -5.5); // punch Craig across screen
+                    if (this.boss.y >= bossGroundY) {
+                        this.boss.y = bossGroundY;
+                        this.boss.vy = 0;
+                        this.boss.vx = 0;
                     }
                 } else {
-                    this.triggerPlayerHurt(20);
+                    // Boss basic movement
+                    if (this.boss.punchTimer > 0) {
+                        this.boss.isWalking = false;
+                    } else {
+                        const dir = (this.player.x - (this.boss.x - this.scrollOffset) > 0) ? 1 : -1;
+                        this.boss.x += dir * this.boss.speed;
+                        this.boss.facing = dir;
+                        this.boss.isWalking = true;
+                    }
                 }
+
+                if (this.boss.flashTimer > 0) this.boss.flashTimer--;
+                if (this.boss.punchTimer > 0) this.boss.punchTimer--;
+                if (this.boss.punchCooldown > 0) this.boss.punchCooldown--;
+
+                // Boss attacks
+                this.boss.throwTimer--;
+                if (this.boss.throwTimer <= 0) {
+                    this.boss.throwTimer = 110 + Math.random() * 60; // 2-3 seconds
+                    const bVx = this.boss.facing * 6.5;
+                    
+                    if (this.boss.style === 'biker-boss') {
+                        // Biker Boss throws dual knives: one straight, one angled downwards!
+                        this.projectiles.push(new KnifeProjectile(
+                            this.boss.x + (this.boss.facing === 1 ? 65 : -15),
+                            this.boss.y + 30,
+                            bVx,
+                            0,
+                            false
+                        ));
+                        this.projectiles.push(new KnifeProjectile(
+                            this.boss.x + (this.boss.facing === 1 ? 65 : -15),
+                            this.boss.y + 30,
+                            bVx,
+                            1.0,
+                            false
+                        ));
+                    } else if (this.boss.style === 'elder') {
+                        // Sensei throws a fast shuriken (using KnifeProjectile)
+                        this.projectiles.push(new KnifeProjectile(
+                            this.boss.x + (this.boss.facing === 1 ? 50 : -10),
+                            this.boss.y + 25,
+                            bVx * 1.2,
+                            0,
+                            false
+                        ));
+                    } else if (this.boss.style === 'leather-red') {
+                        // Billy throws knives
+                        this.projectiles.push(new KnifeProjectile(
+                            this.boss.x + (this.boss.facing === 1 ? 50 : -10),
+                            this.boss.y + 25,
+                            bVx,
+                            0,
+                            false
+                        ));
+                    } else if (this.boss.style === 'dark-master') {
+                        // Dark Master throws 3 knives spread shot!
+                        this.projectiles.push(new KnifeProjectile(this.boss.x + (this.boss.facing === 1 ? 50 : -10), this.boss.y + 25, bVx, -1.5, false));
+                        this.projectiles.push(new KnifeProjectile(this.boss.x + (this.boss.facing === 1 ? 50 : -10), this.boss.y + 25, bVx, 0, false));
+                        this.projectiles.push(new KnifeProjectile(this.boss.x + (this.boss.facing === 1 ? 50 : -10), this.boss.y + 25, bVx, 1.5, false));
+                    } else {
+                        // Clone/default: throws bottles
+                        this.projectiles.push(new BottleProjectile(
+                            this.boss.x + (this.boss.facing === 1 ? 50 : -10),
+                            this.boss.y + 25,
+                            bVx,
+                            -3
+                        ));
+                    }
+                }
+
+                // Contact damage / Punch with Boss
+                const dist = Math.abs((this.player.x + this.player.width/2) - (this.boss.x - this.scrollOffset + this.boss.width/2));
+                const yDist = Math.abs(this.player.y - this.boss.y);
+                if (dist < 60 && yDist < 40 && this.player.state !== 'hurt' && this.player.state !== 'victory') {
+                    if (this.boss.style === 'biker-boss') {
+                        if (this.boss.punchCooldown <= 0) {
+                            this.boss.punchTimer = 15;
+                            this.boss.punchCooldown = 60; // 1 second cooldown
+                            this.triggerPlayerHurt(25, this.boss.facing * 16.0, -5.5); // punch Craig across screen
+                        }
+                    } else {
+                        this.triggerPlayerHurt(20);
+                    }
+                }
+            } else {
+                this.boss.isWalking = false;
             }
         }
 
@@ -3086,7 +3111,7 @@ class RetroGameController {
                     }
                     
                     // Check boss hits
-                    if (this.boss && !proj.hits.has(this.boss)) {
+                    if (this.boss && this.boss.activated && !proj.hits.has(this.boss)) {
                         const dist = Math.abs(proj.x - (this.boss.x + this.boss.width/2));
                         const yDist = Math.abs(proj.y + 35 - (this.boss.y + this.boss.height/2));
                         if (dist < 50 && yDist < 60) {
@@ -3165,7 +3190,7 @@ class RetroGameController {
                         }
                     }
                     
-                    if (!destroyed && this.boss) {
+                    if (!destroyed && this.boss && this.boss.activated) {
                         const dist = Math.abs(proj.x - (this.boss.x + this.boss.width/2));
                         const yDist = Math.abs(proj.y - (this.boss.y + this.boss.height/2));
                         if (dist < 30 && yDist < 50) {
@@ -4012,14 +4037,14 @@ class RetroGameController {
             const feetY = p.y + p.height;
             this.ctx.translate(feetX, feetY);
             
-            if (p.facing === -1) {
+            if (p.facing === 1) {
                 this.ctx.scale(-1, 1);
             }
             if (p.state === 'hurt') {
                 this.ctx.translate((Math.random() - 0.5) * 8, 0);
             }
             
-            // Proportional scaling relative to the idle sprite height, anchoring feet at Y = 985
+            // Proportional scaling relative to the idle sprite height, anchoring feet at sprite.anchorY
             const baseScale = 110 / 905;
             
             // Squash and stretch scale: apply walk bounce or crouch scale
@@ -4030,7 +4055,7 @@ class RetroGameController {
             
             const drawW = activeCanvas.width * baseScale;
             const drawH = activeCanvas.height * baseScale;
-            const drawY = -985 * baseScale;
+            const drawY = -(sprite.anchorY || 985) * baseScale;
             
             // Draw charging visual aura glow / rising sparks
             if (this.isChargingPowerMove && this.chargeTimer > 10) {
@@ -4535,7 +4560,7 @@ class RetroGameController {
             this.ctx.save();
             this.ctx.translate(feetX, feetY);
             
-            const defaultFacing = 1;
+            const defaultFacing = -1;
             if (thug.facing !== defaultFacing) {
                 this.ctx.scale(-1, 1);
             }
@@ -4552,7 +4577,7 @@ class RetroGameController {
             
             const drawW = activeCanvas.width * baseScale;
             const drawH = activeCanvas.height * baseScale;
-            const drawY = -985 * baseScale;
+            const drawY = -(sprite.anchorY || 985) * baseScale;
             
             this.ctx.drawImage(activeCanvas, -drawW / 2, drawY, drawW, drawH);
             this.ctx.restore();
@@ -4892,7 +4917,7 @@ class RetroGameController {
         if (sprite && sprite.loaded && this.sprites.craig_idle && this.sprites.craig_idle.loaded) {
             this.ctx.save();
             this.ctx.translate(feetX, feetY);
-            const defaultFacing = 1;
+            const defaultFacing = -1;
             if (b.facing !== defaultFacing) {
                 this.ctx.scale(-1, 1);
             }
@@ -4909,7 +4934,7 @@ class RetroGameController {
             
             const drawW = activeCanvas.width * baseScale;
             const drawH = activeCanvas.height * baseScale;
-            const drawY = -985 * baseScale;
+            const drawY = -(sprite.anchorY || 985) * baseScale;
             
             if (b.flashTimer > 0 && Math.floor(b.flashTimer / 2) % 2 === 0) {
                 this.ctx.save();
@@ -5316,7 +5341,7 @@ class RetroGameController {
         this.ctx.stroke();
 
         // 3. Boss Health Bar Overlay (Bottom Center - Cinematic Style)
-        if (this.boss) {
+        if (this.boss && this.boss.activated) {
             // Draw background bar at bottom center
             const bx = 150;
             const by = 430;
