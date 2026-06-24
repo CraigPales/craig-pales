@@ -118,9 +118,25 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
             
             let centers = [171, 512, 853];
             let cropW = 340;
-            if (src.includes('thug_leather')) {
-                centers = [365, 604, 912];
-                cropW = 250;
+            
+            if (src.includes('craig_walk2')) {
+                centers = [248, 517, 786];
+                cropW = 270;
+            } else if (src.includes('craig_walk')) {
+                centers = [154, 463, 772];
+                cropW = 310;
+            } else if (src.includes('thug_afro')) {
+                centers = [192, 524, 857];
+                cropW = 340;
+            } else if (src.includes('thug_leather')) {
+                centers = [170, 511, 852];
+                cropW = 344;
+            } else if (src.includes('craig_crouch')) {
+                centers = [171, 510, 849];
+                cropW = 340;
+            } else if (src.includes('craig_jump')) {
+                centers = [205, 496, 787];
+                cropW = 292;
             }
             
             const frames = [];
@@ -147,7 +163,7 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
                 frames.push(colCanvas);
             }
             
-            spriteObj.canvas = frames[1];
+            spriteObj.canvas = src.includes('craig_crouch') ? frames[0] : frames[1];
             spriteObj.walkFrames = frames;
         } else {
             const trimmedCanvas = trimCanvasSimple(transparentCanvas);
