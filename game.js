@@ -82,13 +82,27 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
         anchorY = 979;
     }
     
+    // Assign sheet-specific defaultFacing (1 for RIGHT, -1 for LEFT)
+    let defaultFacing = -1; // default to left-facing
+    if (src.includes('boss_sensei') || 
+        src.includes('boss_slasher') || 
+        src.includes('craig_crouch') || 
+        src.includes('craig_hurt') || 
+        src.includes('craig_jump') || 
+        src.includes('craig_victory') || 
+        src.includes('craig_walk') && !src.includes('craig_walk2') || 
+        src.includes('thug_afro')) {
+        defaultFacing = 1;
+    }
+    
     const spriteObj = {
         loaded: false,
         img: img,
         canvas: null,
         dataUrl: '',
         walkFrames: [],
-        anchorY: anchorY
+        anchorY: anchorY,
+        defaultFacing: defaultFacing
     };
     
     const processImage = () => {
@@ -3985,10 +3999,15 @@ class RetroGameController {
         let sprite = null;
         let activeCanvas = null;
         
-        // Choose walk sprite cycle if walking
-        let walkBounceY = 1.0;
-        let walkBounceX = 1.0;
-        if (p.state === 'walking') {
+        // Add procedural walk bobbing (squash/stretch)
+        const phase = performance.now() * 0.02;
+        const walkBounceY = 1.0 + Math.sin(phase) * 0.035; // 3.5% bounce
+        const walkBounceX = 1.0 - Math.sin(phase) * 0.02;
+        
+        // Crouching and jumping should use the naturally standing up / walking sprites, exact same size
+        const isMoving = p.state === 'walking' || ((p.state === 'jumping' || p.state === 'ducking') && Math.abs(p.vx) > 0.1);
+        
+        if (isMoving) {
             const totalFrames = 6;
             const walkCycle = Math.floor(performance.now() / 90) % totalFrames;
             if (walkCycle < 3) {
@@ -4002,30 +4021,15 @@ class RetroGameController {
                     activeCanvas = sprite.walkFrames[walkCycle - 3];
                 }
             }
-            
-            // Add procedural walk bobbing (squash/stretch)
-            const phase = performance.now() * 0.02;
-            walkBounceY = 1.0 + Math.sin(phase) * 0.035; // 3.5% bounce
-            walkBounceX = 1.0 - Math.sin(phase) * 0.02;
-        } else if (p.state === 'idle') {
-            sprite = this.sprites.craig_idle;
-        } else if (p.state === 'jumping') {
-            sprite = this.sprites.craig_jump;
-        } else if (p.state === 'ducking') {
-            sprite = this.sprites.craig_crouch;
         } else if (p.state === 'attacking') {
             sprite = (p.attackType === 'kick') ? this.sprites.craig_kick : this.sprites.craig_punch;
         } else if (p.state === 'hurt') {
             sprite = this.sprites.craig_hurt;
         } else if (p.state === 'victory') {
             sprite = this.sprites.craig_victory;
-        }
-        
-        // Swap to crouch sprite when crouchRatio is high
-        const crouchRatio = p.crouchRatio || 0;
-        const isCrouched = (p.isDucking || p.state === 'ducking') && crouchRatio > 0.5;
-        if (isCrouched) {
-            sprite = this.sprites.craig_crouch;
+        } else {
+            // idle, jumping (stationary), ducking (stationary)
+            sprite = this.sprites.craig_idle;
         }
 
         if (sprite && sprite.loaded && this.sprites.craig_idle && this.sprites.craig_idle.loaded) {
@@ -4037,7 +4041,8 @@ class RetroGameController {
             const feetY = p.y + p.height;
             this.ctx.translate(feetX, feetY);
             
-            if (p.facing === 1) {
+            const defaultFacing = sprite.defaultFacing || -1;
+            if (p.facing !== defaultFacing) {
                 this.ctx.scale(-1, 1);
             }
             if (p.state === 'hurt') {
@@ -4047,9 +4052,9 @@ class RetroGameController {
             // Proportional scaling relative to the idle sprite height, anchoring feet at sprite.anchorY
             const baseScale = 110 / 905;
             
-            // Squash and stretch scale: apply walk bounce or crouch scale
-            const yScale = isCrouched ? 0.6 : (p.state === 'walking' ? walkBounceY : (1 - crouchRatio * 0.35));
-            const xScale = isCrouched ? 0.6 : (p.state === 'walking' ? walkBounceX : (1 + crouchRatio * 0.15));
+            // Squash and stretch scale: apply walk bounce (crouch and jump do not scale)
+            const yScale = isMoving ? walkBounceY : 1.0;
+            const xScale = isMoving ? walkBounceX : 1.0;
             
             this.ctx.scale(xScale, yScale);
             
@@ -4560,7 +4565,7 @@ class RetroGameController {
             this.ctx.save();
             this.ctx.translate(feetX, feetY);
             
-            const defaultFacing = -1;
+            const defaultFacing = sprite.defaultFacing || -1;
             if (thug.facing !== defaultFacing) {
                 this.ctx.scale(-1, 1);
             }
@@ -4917,7 +4922,7 @@ class RetroGameController {
         if (sprite && sprite.loaded && this.sprites.craig_idle && this.sprites.craig_idle.loaded) {
             this.ctx.save();
             this.ctx.translate(feetX, feetY);
-            const defaultFacing = -1;
+            const defaultFacing = sprite.defaultFacing || -1;
             if (b.facing !== defaultFacing) {
                 this.ctx.scale(-1, 1);
             }
