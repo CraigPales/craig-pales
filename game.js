@@ -69,21 +69,35 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
     img.src = src;
     
     // Assign sheet-specific anchorY (baseline bottom-most Y pixel coordinate)
-    let anchorY = 985; // default for Craig idle/walks
-    if (src.includes('boss_sensei')) {
-        anchorY = 952;
-    } else if (src.includes('thug_leather')) {
-        anchorY = 970;
+    let anchorY = 985;
+    if (src.includes('craig_walk2')) {
+        anchorY = 983;
+    } else if (src.includes('craig_walk')) {
+        anchorY = 1011;
     } else if (src.includes('craig_crouch')) {
         anchorY = 1022;
-    } else if (src.includes('thug_afro') || src.includes('boss_slasher') || src.includes('craig_punch') || src.includes('craig_kick') || src.includes('craig_victory') || src.includes('craig_hurt')) {
-        anchorY = 1024;
     } else if (src.includes('craig_jump')) {
         anchorY = 979;
+    } else if (src.includes('thug_leather')) {
+        anchorY = 970;
+    } else if (src.includes('boss_sensei')) {
+        anchorY = 952;
+    } else if (src.includes('thug_afro') || src.includes('boss_slasher') || src.includes('craig_punch') || src.includes('craig_kick') || src.includes('craig_victory') || src.includes('craig_hurt')) {
+        anchorY = 1024;
     }
     
-    // All character sheets naturally face LEFT (-1) by default in their raw drawings
-    const defaultFacing = -1;
+    // Assign sheet-specific default facing
+    let defaultFacing = -1; // default is LEFT
+    if (src.includes('craig_idle') || 
+        src.includes('craig_crouch') || 
+        src.includes('craig_jump') || 
+        src.includes('craig_kick') || 
+        src.includes('craig_punch') || 
+        src.includes('craig_hurt') || 
+        src.includes('craig_victory') ||
+        src.includes('thug_leather')) {
+        defaultFacing = 1; // these sheets naturally face RIGHT
+    }
     
     const spriteObj = {
         loaded: false,
@@ -109,62 +123,28 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
             tolVal = 55;
         }
         
-        const transparentCanvas = floodFillChromaKey(img, keyColorVal, tolVal);
-        const isMultiFrame = src.includes('craig_walk') || src.includes('thug_afro') || src.includes('thug_leather') || src.includes('craig_crouch') || src.includes('craig_jump');
+        let transparentCanvas = floodFillChromaKey(img, keyColorVal, tolVal);
+        
+        // If it is thug_leather, crop horizontally to remove the garbage on left/right edges
+        if (src.includes('thug_leather')) {
+            const tempCanvas = document.createElement('canvas');
+            const startX = 210;
+            const endX = 780;
+            const cropW = endX - startX;
+            tempCanvas.width = cropW;
+            tempCanvas.height = transparentCanvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(transparentCanvas, startX, 0, cropW, transparentCanvas.height, 0, 0, cropW, transparentCanvas.height);
+            transparentCanvas = tempCanvas;
+        }
+        
+        const isMultiFrame = false; // All character sheets are treated as single-frame sprites
         
         if (isMultiFrame) {
-            const w = transparentCanvas.width;
-            const h = transparentCanvas.height;
-            
-            let centers = [171, 512, 853];
-            let cropW = 340;
-            
-            if (src.includes('craig_walk2')) {
-                centers = [248, 517, 786];
-                cropW = 270;
-            } else if (src.includes('craig_walk')) {
-                centers = [154, 463, 772];
-                cropW = 310;
-            } else if (src.includes('thug_afro')) {
-                centers = [192, 524, 857];
-                cropW = 340;
-            } else if (src.includes('thug_leather')) {
-                centers = [170, 511, 852];
-                cropW = 344;
-            } else if (src.includes('craig_crouch')) {
-                centers = [171, 510, 849];
-                cropW = 340;
-            } else if (src.includes('craig_jump')) {
-                centers = [205, 496, 787];
-                cropW = 292;
-            }
-            
-            const frames = [];
-            for (let i = 0; i < 3; i++) {
-                const center = centers[i];
-                let startX = Math.round(center - cropW / 2);
-                let endX = startX + cropW;
-                
-                if (startX < 0) {
-                    startX = 0;
-                    endX = cropW;
-                }
-                if (endX > w) {
-                    endX = w;
-                    startX = w - cropW;
-                }
-                
-                const colCanvas = document.createElement('canvas');
-                colCanvas.width = cropW;
-                colCanvas.height = h;
-                const colCtx = colCanvas.getContext('2d');
-                
-                colCtx.drawImage(transparentCanvas, startX, 0, cropW, h, 0, 0, cropW, h);
-                frames.push(colCanvas);
-            }
-            
-            spriteObj.canvas = src.includes('craig_crouch') ? frames[0] : frames[1];
-            spriteObj.walkFrames = frames;
+            // Keep legacy branch structure but make it unreachable
+            const trimmedCanvas = trimCanvasSimple(transparentCanvas);
+            spriteObj.canvas = trimmedCanvas;
+            spriteObj.walkFrames = [trimmedCanvas, trimmedCanvas, trimmedCanvas];
         } else {
             const trimmedCanvas = trimCanvasSimple(transparentCanvas);
             spriteObj.canvas = trimmedCanvas;
