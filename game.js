@@ -82,18 +82,8 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
         anchorY = 979;
     }
     
-    // Assign sheet-specific defaultFacing (1 for RIGHT, -1 for LEFT)
-    let defaultFacing = -1; // default to left-facing
-    if (src.includes('boss_sensei') || 
-        src.includes('boss_slasher') || 
-        src.includes('craig_crouch') || 
-        src.includes('craig_hurt') || 
-        src.includes('craig_jump') || 
-        src.includes('craig_victory') || 
-        src.includes('craig_walk') && !src.includes('craig_walk2') || 
-        src.includes('thug_afro')) {
-        defaultFacing = 1;
-    }
+    // All character sheets naturally face LEFT (-1) by default in their raw drawings
+    const defaultFacing = -1;
     
     const spriteObj = {
         loaded: false,
@@ -120,7 +110,7 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
         }
         
         const transparentCanvas = floodFillChromaKey(img, keyColorVal, tolVal);
-        const isMultiFrame = src.includes('craig_walk') || src.includes('thug_afro') || src.includes('thug_leather');
+        const isMultiFrame = src.includes('craig_walk') || src.includes('thug_afro') || src.includes('thug_leather') || src.includes('craig_crouch') || src.includes('craig_jump');
         
         if (isMultiFrame) {
             const w = transparentCanvas.width;
@@ -2023,38 +2013,42 @@ class RetroGameController {
         this.scrollOffset = 0;
         this.gameProgress = 0;
         
-        // Spawn Boss at the very end of the stage in world space
-        const maxHp = 5 + lvlNum * 2;
-        let bW = 55;
-        let bH = 95;
-        if (data.bossStyle === 'biker-boss') {
-            bW = 72;
-            bH = 100;
+        if (lvlNum === 1) {
+            this.boss = null;
+        } else {
+            // Spawn Boss at the very end of the stage in world space
+            const maxHp = 5 + lvlNum * 2;
+            let bW = 55;
+            let bH = 95;
+            if (data.bossStyle === 'biker-boss') {
+                bW = 72;
+                bH = 100;
+            }
+            
+            // Align boss Y so feet are at ground level (this.groundY + 75)
+            const bossGroundY = this.groundY + 75 - bH;
+            
+            this.boss = {
+                name: data.bossName,
+                style: data.bossStyle,
+                bossStyle: data.bossStyle,
+                x: data.length + 650, // Positioned at the very end of the stage
+                y: bossGroundY,
+                width: bW,
+                height: bH,
+                speed: 1.0 + lvlNum * 0.1,
+                health: maxHp,
+                maxHealth: maxHp,
+                facing: -1,
+                throwTimer: 60,
+                flashTimer: 0,
+                vx: 0,
+                vy: 0,
+                punchTimer: 0,
+                punchCooldown: 0,
+                activated: false // Starts inactive
+            };
         }
-        
-        // Align boss Y so feet are at ground level (this.groundY + 75)
-        const bossGroundY = this.groundY + 75 - bH;
-        
-        this.boss = {
-            name: data.bossName,
-            style: data.bossStyle,
-            bossStyle: data.bossStyle,
-            x: data.length + 650, // Positioned at the very end of the stage
-            y: bossGroundY,
-            width: bW,
-            height: bH,
-            speed: 1.0 + lvlNum * 0.1,
-            health: maxHp,
-            maxHealth: maxHp,
-            facing: -1,
-            throwTimer: 60,
-            flashTimer: 0,
-            vx: 0,
-            vy: 0,
-            punchTimer: 0,
-            punchCooldown: 0,
-            activated: false // Starts inactive
-        };
 
         this.thugs = [];
         this.projectiles = [];
@@ -2905,9 +2899,13 @@ class RetroGameController {
                 }
             }
         } else {
-            // Level Scroll at 100%: Activate Boss if not activated yet
+            // Level Scroll at 100%: Activate Boss if not activated yet, or clear level if there is no boss
             if (this.boss && !this.boss.activated && this.gameState === 'playing') {
                 this.boss.activated = true;
+            } else if (!this.boss && this.gameState === 'playing') {
+                gameAudio.playVictory();
+                this.gameState = 'levelclear';
+                this.player.state = 'victory';
             }
         }
 
@@ -4004,7 +4002,7 @@ class RetroGameController {
         const walkBounceY = 1.0 + Math.sin(phase) * 0.035; // 3.5% bounce
         const walkBounceX = 1.0 - Math.sin(phase) * 0.02;
         
-        // Crouching and jumping should use the naturally standing up / walking sprites, exact same size
+        // Walk cycle animation if moving
         const isMoving = p.state === 'walking' || ((p.state === 'jumping' || p.state === 'ducking') && Math.abs(p.vx) > 0.1);
         
         if (isMoving) {
@@ -4021,6 +4019,10 @@ class RetroGameController {
                     activeCanvas = sprite.walkFrames[walkCycle - 3];
                 }
             }
+        } else if (p.state === 'ducking') {
+            sprite = this.sprites.craig_crouch;
+        } else if (p.state === 'jumping') {
+            sprite = this.sprites.craig_jump;
         } else if (p.state === 'attacking') {
             sprite = (p.attackType === 'kick') ? this.sprites.craig_kick : this.sprites.craig_punch;
         } else if (p.state === 'hurt') {
@@ -4028,7 +4030,6 @@ class RetroGameController {
         } else if (p.state === 'victory') {
             sprite = this.sprites.craig_victory;
         } else {
-            // idle, jumping (stationary), ducking (stationary)
             sprite = this.sprites.craig_idle;
         }
 
