@@ -94,25 +94,14 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
         }
         
         const transparentCanvas = floodFillChromaKey(img, keyColorVal, tolVal);
-        const isMultiFrame = src.includes('craig_walk') || src.includes('thug_afro') || src.includes('thug_leather') || src.includes('craig_crouch');
+        const isMultiFrame = src.includes('craig_walk') || src.includes('thug_afro') || src.includes('thug_leather');
         
         if (isMultiFrame) {
             const w = transparentCanvas.width;
             const h = transparentCanvas.height;
             
-            // Define custom valley separation points for each spritesheet to avoid split limb/ghost artifacts
-            let valleys = [250, 776]; // default
-            if (src.includes('thug_leather')) {
-                valleys = [250, 729];
-            } else if (src.includes('craig_walk2')) {
-                valleys = [250, 774];
-            } else if (src.includes('craig_walk')) {
-                valleys = [250, 779];
-            } else if (src.includes('thug_afro')) {
-                valleys = [253, 776];
-            } else if (src.includes('craig_crouch')) {
-                valleys = [341, 682];
-            }
+            // Slicing 1024x1024 walk sheets into equal thirds (0..341, 341..682, 682..1024)
+            let valleys = [341, 682];
             
             const frames = [];
             for (let i = 0; i < 3; i++) {
@@ -141,11 +130,7 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
                 frames.push(trimmedCol);
             }
             
-            if (src.includes('craig_crouch')) {
-                spriteObj.canvas = frames[0];
-            } else {
-                spriteObj.canvas = frames[1];
-            }
+            spriteObj.canvas = frames[1];
             spriteObj.walkFrames = frames;
         } else {
             const trimmedCanvas = trimCanvasSimple(transparentCanvas);
@@ -1303,42 +1288,187 @@ class PowerWaveProjectile {
         if (this.vx < 0) {
             ctx.scale(-1, 1);
         }
-        ctx.shadowBlur = 20;
         
-        if (this.type === 'punch') {
-            ctx.shadowColor = '#d946ef';
-            ctx.fillStyle = 'rgba(168, 85, 247, 0.85)';
+        ctx.shadowBlur = 25;
+        ctx.shadowColor = '#f97316'; // orange glow
+
+        const time = performance.now() * 0.015;
+        const totalSegments = 8;
+        const segmentSpacing = 20;
+
+        // 1. Draw serpentine body segments trailing behind
+        for (let i = totalSegments - 1; i >= 0; i--) {
+            ctx.save();
             
-            // Draw a massive crescent blade wave
-            ctx.beginPath();
-            ctx.arc(0, 0, 60, -Math.PI / 2.5, Math.PI / 2.5);
-            ctx.quadraticCurveTo(25, 0, 30, -Math.PI / 2.5);
-            ctx.closePath();
-            ctx.fill();
+            // Calculate undulating wave position
+            const undulation = Math.sin(time - i * 0.7) * 14;
+            const segmentX = -i * segmentSpacing;
+            const segmentY = undulation;
             
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 3.5;
-            ctx.stroke();
-        } else {
-            ctx.shadowColor = '#fbbf24';
-            ctx.fillStyle = 'rgba(249, 115, 22, 0.85)';
-            
-            // Draw a massive fiery hurricane ring spinner
-            const rot = performance.now() * 0.03;
-            ctx.rotate(rot);
-            
-            ctx.beginPath();
-            ctx.arc(0, 0, 50, 0, Math.PI * 2);
-            ctx.lineWidth = 14;
-            ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.arc(0, 0, 32, 0, Math.PI * 2);
-            ctx.lineWidth = 6;
-            ctx.strokeStyle = '#ffffff';
-            ctx.stroke();
+            // Width/radius of segment decays as it gets closer to the tail
+            const r = 20 - i * 1.8;
+            if (r > 0) {
+                // Fiery radial gradient for each body segment
+                const grad = ctx.createRadialGradient(segmentX, segmentY, 0, segmentX, segmentY, r);
+                if (i % 2 === 0) {
+                    grad.addColorStop(0, '#ffffff'); // white-hot core
+                    grad.addColorStop(0.3, '#fef08a'); // bright yellow
+                    grad.addColorStop(0.7, '#f97316'); // orange
+                    grad.addColorStop(1.0, 'rgba(239, 68, 68, 0)'); // fade out
+                } else {
+                    grad.addColorStop(0, '#fef08a');
+                    grad.addColorStop(0.4, '#f97316');
+                    grad.addColorStop(0.8, '#ef4444');
+                    grad.addColorStop(1.0, 'rgba(220, 38, 38, 0)');
+                }
+                
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(segmentX, segmentY, r, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Fiery dragon scales / spines on top of the segments
+                if (i > 0) {
+                    ctx.fillStyle = '#ef4444';
+                    ctx.beginPath();
+                    ctx.moveTo(segmentX - r * 0.5, segmentY - r * 0.8);
+                    ctx.lineTo(segmentX, segmentY - r * 1.4); // pointed spike
+                    ctx.lineTo(segmentX + r * 0.5, segmentY - r * 0.8);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+            ctx.restore();
         }
+
+        // 2. Draw flying fire wings
+        const wingUndulation = Math.sin(time * 1.5) * 20;
+        ctx.save();
+        ctx.translate(-40, Math.sin(time) * 14);
+        
+        // Wing gradient
+        const wingGrad = ctx.createLinearGradient(0, -30 + wingUndulation, 10, 20);
+        wingGrad.addColorStop(0, '#ffffff');
+        wingGrad.addColorStop(0.5, '#f97316');
+        wingGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        
+        ctx.fillStyle = wingGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(15, -45 + wingUndulation, 30, -35 + wingUndulation);
+        ctx.quadraticCurveTo(15, -10, 0, 10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // 3. Draw DRAGON HEAD at the front (x=0)
+        ctx.save();
+        const headY = Math.sin(time) * 14;
+        ctx.translate(10, headY);
+        
+        // Main head shape
+        const headGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 28);
+        headGrad.addColorStop(0, '#ffffff');
+        headGrad.addColorStop(0.4, '#fbbf24'); // gold
+        headGrad.addColorStop(0.8, '#ea580c'); // orange-red
+        headGrad.addColorStop(1, '#991b1b'); // dark red outline
+        
+        ctx.fillStyle = headGrad;
+        ctx.strokeStyle = '#7f1d1d';
+        ctx.lineWidth = 2.5;
+
+        // Snout and open jaws
+        ctx.beginPath();
+        ctx.moveTo(-15, -12);
+        ctx.lineTo(15, -15); // upper snout top
+        ctx.lineTo(25, -6);  // nose tip
+        ctx.lineTo(8, 0);    // upper mouth inside
+        ctx.lineTo(18, 12);  // lower jaw tip
+        ctx.lineTo(-5, 8);   // lower jaw back
+        ctx.lineTo(-18, 15);  // chin/neck
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Fangs inside open jaws
+        ctx.fillStyle = '#ffffff';
+        // Upper fang
+        ctx.beginPath();
+        ctx.moveTo(12, -4);
+        ctx.lineTo(14, 2);
+        ctx.lineTo(8, -1);
+        ctx.closePath();
+        ctx.fill();
+        // Lower fang
+        ctx.beginPath();
+        ctx.moveTo(10, 4);
+        ctx.lineTo(12, 1);
+        ctx.lineTo(7, 3);
+        ctx.closePath();
+        ctx.fill();
+
+        // Horns pointing backwards
+        ctx.fillStyle = '#f97316';
+        ctx.strokeStyle = '#7f1d1d';
+        
+        // Top horn
+        ctx.beginPath();
+        ctx.moveTo(-10, -12);
+        ctx.quadraticCurveTo(-22, -32, -35, -28);
+        ctx.quadraticCurveTo(-24, -14, -12, -8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Bottom smaller horn
+        ctx.beginPath();
+        ctx.moveTo(-14, -6);
+        ctx.quadraticCurveTo(-24, -20, -32, -16);
+        ctx.quadraticCurveTo(-21, -6, -14, -1);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Glowing fiery eyes (large yellow/white circles)
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#facc15';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(-2, -6, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0; // reset shadow for head details
+        
+        // Angry eyebrow slant over the eye
+        ctx.strokeStyle = '#7f1d1d';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(-6, -11);
+        ctx.lineTo(3, -7);
+        ctx.stroke();
+
+        // Fire breath whiskers / whiskers of light
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(-4, 0);
+        ctx.quadraticCurveTo(8, 6, 22, 10);
+        ctx.stroke();
+
+        ctx.restore();
+
+        // 4. Fire breath embers blowing forward from snout
+        ctx.fillStyle = '#fef08a';
+        const particleTime = performance.now() * 0.005;
+        for (let j = 0; j < 5; j++) {
+            const pOff = (particleTime + j * 0.3) % 1.0;
+            const px = 25 + pOff * 50;
+            const py = Math.sin(time + j) * 14 + (Math.sin(particleTime * 5 + j) * 8);
+            const pr = 4 * (1.0 - pOff);
+            ctx.beginPath();
+            ctx.arc(px, py, pr, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         ctx.restore();
     }
 }
@@ -3547,20 +3677,30 @@ class RetroGameController {
     drawCraig() {
         const p = this.player;
         let sprite = null;
+        let activeCanvas = null;
         
         // Choose walk sprite cycle if walking
         let walkBounceY = 1.0;
         let walkBounceX = 1.0;
         if (p.state === 'walking') {
-            const frameIdx = Math.floor(performance.now() / 150) % 4;
-            if (frameIdx === 0) sprite = this.sprites.craig_walk;
-            else if (frameIdx === 1 || frameIdx === 3) sprite = this.sprites.craig_idle;
-            else sprite = this.sprites.craig_walk2;
+            const totalFrames = 6;
+            const walkCycle = Math.floor(performance.now() / 90) % totalFrames;
+            if (walkCycle < 3) {
+                sprite = this.sprites.craig_walk;
+                if (sprite && sprite.loaded && sprite.walkFrames && sprite.walkFrames.length >= 3) {
+                    activeCanvas = sprite.walkFrames[walkCycle];
+                }
+            } else {
+                sprite = this.sprites.craig_walk2;
+                if (sprite && sprite.loaded && sprite.walkFrames && sprite.walkFrames.length >= 3) {
+                    activeCanvas = sprite.walkFrames[walkCycle - 3];
+                }
+            }
             
             // Add procedural walk bobbing (squash/stretch)
-            const phase = performance.now() * 0.015;
-            walkBounceY = 1.0 + Math.sin(phase) * 0.025; // 2.5% bounce
-            walkBounceX = 1.0 - Math.sin(phase) * 0.015;
+            const phase = performance.now() * 0.02;
+            walkBounceY = 1.0 + Math.sin(phase) * 0.035; // 3.5% bounce
+            walkBounceX = 1.0 - Math.sin(phase) * 0.02;
         } else if (p.state === 'idle') {
             sprite = this.sprites.craig_idle;
         } else if (p.state === 'jumping') {
@@ -3583,6 +3723,9 @@ class RetroGameController {
         }
 
         if (sprite && sprite.loaded && this.sprites.craig_idle && this.sprites.craig_idle.loaded) {
+            if (!activeCanvas) {
+                activeCanvas = sprite.canvas;
+            }
             this.ctx.save();
             const feetX = p.x + p.width / 2;
             const feetY = p.y + p.height;
@@ -3605,8 +3748,8 @@ class RetroGameController {
             
             this.ctx.scale(xScale, yScale);
             
-            const drawW = sprite.canvas.width * baseScale;
-            const drawH = sprite.canvas.height * baseScale;
+            const drawW = activeCanvas.width * baseScale;
+            const drawH = activeCanvas.height * baseScale;
             
             // Draw charging visual aura glow / rising sparks
             if (this.isChargingPowerMove && this.chargeTimer > 10) {
@@ -3642,11 +3785,11 @@ class RetroGameController {
             this.ctx.shadowColor = '#a855f7';
             this.ctx.shadowBlur = 15;
             this.ctx.globalAlpha = 0.35 + Math.sin(performance.now() * 0.006) * 0.15;
-            this.ctx.drawImage(sprite.canvas, -drawW / 2, -drawH, drawW, drawH);
+            this.ctx.drawImage(activeCanvas, -drawW / 2, -drawH, drawW, drawH);
             this.ctx.restore();
             
             // Draw character (foot-anchored: bottom of sprite is at y=0)
-            this.ctx.drawImage(sprite.canvas, -drawW / 2, -drawH, drawW, drawH);
+            this.ctx.drawImage(activeCanvas, -drawW / 2, -drawH, drawW, drawH);
             this.ctx.restore();
         } else {
             this.drawCraigVector();
