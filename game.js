@@ -2135,7 +2135,11 @@ class RetroGameController {
     }
 
     advanceLevel() {
-        if (this.currentLevel < 4) {
+        if (this.currentLevel === 1) {
+            this.gameState = 'victory';
+            this.player.state = 'victory';
+            gameAudio.playVictory();
+        } else if (this.currentLevel < 4) {
             this.currentLevel++;
             this.loadLevel(this.currentLevel);
             this.player.health = Math.min(100, this.player.health + 40); // Restore health
@@ -2429,7 +2433,7 @@ class RetroGameController {
         this.player.state = 'idle';
         this.player.knives = 0;
         
-        if (this.currentLevel >= 4 && this.gameState === 'victory') {
+        if (this.gameState === 'victory') {
             this.currentLevel = 1;
             this.player.score = 0;
         }
