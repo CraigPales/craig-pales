@@ -27,8 +27,6 @@ function trimCanvasSimple(canvas) {
         
         let minX = width;
         let maxX = 0;
-        let minY = height;
-        let maxY = 0;
         let found = false;
         
         for (let y = 0; y < height; y++) {
@@ -37,8 +35,6 @@ function trimCanvasSimple(canvas) {
                 if (alpha > 0) {
                     if (x < minX) minX = x;
                     if (x > maxX) maxX = x;
-                    if (y < minY) minY = y;
-                    if (y > maxY) maxY = y;
                     found = true;
                 }
             }
@@ -49,7 +45,7 @@ function trimCanvasSimple(canvas) {
         }
         
         const trimWidth = maxX - minX + 1;
-        const trimHeight = maxY - minY + 1;
+        const trimHeight = height;
         
         if (trimWidth <= 0 || trimHeight <= 0) return canvas;
         
@@ -58,7 +54,7 @@ function trimCanvasSimple(canvas) {
         trimmedCanvas.height = trimHeight;
         const trimmedCtx = trimmedCanvas.getContext('2d');
         
-        trimmedCtx.drawImage(canvas, minX, minY, trimWidth, trimHeight, 0, 0, trimWidth, trimHeight);
+        trimmedCtx.drawImage(canvas, minX, 0, trimWidth, trimHeight, 0, 0, trimWidth, trimHeight);
         return trimmedCanvas;
     } catch (e) {
         console.warn("Trim canvas failed:", e);
@@ -100,8 +96,17 @@ function getSprite(src, keyColor = {r: 0, g: 0, b: 0}, tolerance = 40) {
             const w = transparentCanvas.width;
             const h = transparentCanvas.height;
             
-            // Slicing 1024x1024 walk sheets into equal thirds (0..341, 341..682, 682..1024)
-            let valleys = [341, 682];
+            // Slicing 1024x1024 walk sheets using custom valley separation points to prevent limb cut-offs
+            let valleys = [250, 776]; // default
+            if (src.includes('thug_leather')) {
+                valleys = [210, 780];
+            } else if (src.includes('craig_walk2')) {
+                valleys = [250, 774];
+            } else if (src.includes('craig_walk')) {
+                valleys = [250, 779];
+            } else if (src.includes('thug_afro')) {
+                valleys = [253, 776];
+            }
             
             const frames = [];
             for (let i = 0; i < 3; i++) {
@@ -3738,18 +3743,18 @@ class RetroGameController {
                 this.ctx.translate((Math.random() - 0.5) * 8, 0);
             }
             
-            // Proportional scaling relative to the idle sprite trimmed height
-            const refIdleHeight = this.sprites.craig_idle.canvas.height;
-            const baseScale = 110 / refIdleHeight;
+            // Proportional scaling relative to the idle sprite height, anchoring feet at Y = 985
+            const baseScale = 110 / 905;
             
             // Squash and stretch scale: apply walk bounce or crouch scale
-            const yScale = isCrouched ? 1.0 : (p.state === 'walking' ? walkBounceY : (1 - crouchRatio * 0.35));
-            const xScale = isCrouched ? 1.0 : (p.state === 'walking' ? walkBounceX : (1 + crouchRatio * 0.15));
+            const yScale = isCrouched ? 0.6 : (p.state === 'walking' ? walkBounceY : (1 - crouchRatio * 0.35));
+            const xScale = isCrouched ? 0.6 : (p.state === 'walking' ? walkBounceX : (1 + crouchRatio * 0.15));
             
             this.ctx.scale(xScale, yScale);
             
             const drawW = activeCanvas.width * baseScale;
             const drawH = activeCanvas.height * baseScale;
+            const drawY = -985 * baseScale;
             
             // Draw charging visual aura glow / rising sparks
             if (this.isChargingPowerMove && this.chargeTimer > 10) {
@@ -3785,11 +3790,11 @@ class RetroGameController {
             this.ctx.shadowColor = '#a855f7';
             this.ctx.shadowBlur = 15;
             this.ctx.globalAlpha = 0.35 + Math.sin(performance.now() * 0.006) * 0.15;
-            this.ctx.drawImage(activeCanvas, -drawW / 2, -drawH, drawW, drawH);
+            this.ctx.drawImage(activeCanvas, -drawW / 2, drawY, drawW, drawH);
             this.ctx.restore();
             
             // Draw character (foot-anchored: bottom of sprite is at y=0)
-            this.ctx.drawImage(activeCanvas, -drawW / 2, -drawH, drawW, drawH);
+            this.ctx.drawImage(activeCanvas, -drawW / 2, drawY, drawW, drawH);
             this.ctx.restore();
         } else {
             this.drawCraigVector();
@@ -4267,13 +4272,13 @@ class RetroGameController {
             }
             
             // Scale using the Craig reference scale to ensure thugs and Craig are perfectly proportioned
-            const refIdleHeight = this.sprites.craig_idle.canvas.height;
-            const baseScale = 110 / refIdleHeight;
+            const baseScale = 110 / 905;
             
             const drawW = activeCanvas.width * baseScale;
             const drawH = activeCanvas.height * baseScale;
+            const drawY = -985 * baseScale;
             
-            this.ctx.drawImage(activeCanvas, -drawW / 2, -drawH, drawW, drawH);
+            this.ctx.drawImage(activeCanvas, -drawW / 2, drawY, drawW, drawH);
             this.ctx.restore();
         } else {
             this.drawThugVector(thug);
@@ -4624,21 +4629,21 @@ class RetroGameController {
             }
             
             // Proportional scaling relative to the idle sprite height, bosses are slightly larger (120 reference height)
-            const refIdleHeight = this.sprites.craig_idle.canvas.height;
-            const baseScale = 120 / refIdleHeight;
+            const baseScale = 120 / 905;
             
             const drawW = activeCanvas.width * baseScale;
             const drawH = activeCanvas.height * baseScale;
+            const drawY = -985 * baseScale;
             
             if (b.flashTimer > 0 && Math.floor(b.flashTimer / 2) % 2 === 0) {
                 this.ctx.save();
-                this.ctx.drawImage(activeCanvas, -drawW / 2, -drawH, drawW, drawH);
+                this.ctx.drawImage(activeCanvas, -drawW / 2, drawY, drawW, drawH);
                 this.ctx.globalCompositeOperation = 'source-atop';
                 this.ctx.fillStyle = 'rgba(230, 57, 70, 0.6)';
-                this.ctx.fillRect(-drawW / 2, -drawH, drawW, drawH);
+                this.ctx.fillRect(-drawW / 2, drawY, drawW, drawH);
                 this.ctx.restore();
             } else {
-                this.ctx.drawImage(activeCanvas, -drawW / 2, -drawH, drawW, drawH);
+                this.ctx.drawImage(activeCanvas, -drawW / 2, drawY, drawW, drawH);
             }
             this.ctx.restore();
         } else {
