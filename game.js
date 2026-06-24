@@ -730,6 +730,56 @@ class RetroAudio {
         } catch(e) {}
     }
 
+    playBarsDrop() {
+        this.init();
+        if (!this.ctx) return;
+        try {
+            const now = this.ctx.currentTime;
+            
+            // Multiple metallic bars clattering
+            const delays = [0, 0.05, 0.11, 0.18, 0.26, 0.35];
+            delays.forEach((delay, idx) => {
+                const clangTime = now + delay;
+                
+                // Main metal chime oscillator
+                const osc1 = this.ctx.createOscillator();
+                const osc2 = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc1.type = 'square';
+                const f1 = 880 - idx * 110 + (Math.random() - 0.5) * 60;
+                osc1.frequency.setValueAtTime(f1, clangTime);
+                osc1.frequency.exponentialRampToValueAtTime(100, clangTime + 0.14);
+                
+                osc2.type = 'triangle';
+                const f2 = 587 - idx * 80 + (Math.random() - 0.5) * 40;
+                osc2.frequency.setValueAtTime(f2, clangTime);
+                osc2.frequency.exponentialRampToValueAtTime(60, clangTime + 0.18);
+                
+                // Gain envelope
+                const vol = 0.18 * (1.0 - idx * 0.15);
+                gain.gain.setValueAtTime(vol, clangTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, clangTime + 0.18);
+                
+                // Hollow metal resonance filter
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(1500 - idx * 200, clangTime);
+                filter.Q.value = 7.0;
+                
+                osc1.connect(filter);
+                osc2.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                osc1.start(clangTime);
+                osc1.stop(clangTime + 0.18);
+                osc2.start(clangTime);
+                osc2.stop(clangTime + 0.18);
+            });
+        } catch(e) {}
+    }
+
     playHurt() {
         this.init();
         if (!this.ctx) return;
@@ -1129,6 +1179,62 @@ class SlicedDebris {
             ctx.stroke();
         }
 
+        ctx.restore();
+    }
+}
+class CageBarDebris {
+    constructor(x, y, vx, vy) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.rotation = Math.random() * 0.4 - 0.2;
+        this.vRotation = (Math.random() - 0.5) * 0.4;
+        this.life = 1.0;
+        this.onGround = false;
+        this.groundY = 415; // default ground level
+    }
+
+    update() {
+        if (!this.onGround) {
+            this.x += this.vx;
+            this.vy += 0.45; // gravity
+            this.y += this.vy;
+            this.rotation += this.vRotation;
+            
+            // Ground bounce
+            if (this.y >= this.groundY) {
+                this.y = this.groundY;
+                this.vy = -Math.abs(this.vy) * 0.35; // bounce slightly
+                this.vx *= 0.5;
+                this.vRotation *= 0.5;
+                if (Math.abs(this.vy) < 1) {
+                    this.vy = 0;
+                    this.vx = 0;
+                    this.vRotation = 0;
+                    this.onGround = true;
+                }
+            }
+        }
+        this.life -= 0.008; // slow fadeout
+    }
+
+    draw(ctx, scrollOffset) {
+        ctx.save();
+        ctx.translate(this.x - scrollOffset, this.y);
+        ctx.rotate(this.rotation);
+        ctx.globalAlpha = Math.max(0, this.life);
+
+        // Draw a metal cage bar (thick grey rectangle)
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3;
+        ctx.fillStyle = '#6b7280'; // medium grey
+        
+        ctx.beginPath();
+        ctx.roundRect(-4, -60, 8, 120, [3]);
+        ctx.fill();
+        ctx.stroke();
+        
         ctx.restore();
     }
 }
@@ -1726,6 +1832,8 @@ class RetroGameController {
         this.screenShake = 0;
         this.levelLength = 2000; // Walk 2000px to reach boss
         this.gameProgress = 0; // 0.0 to 1.0
+        this.cageState = 'intact'; // 'intact', 'falling', 'broken'
+        this.levelProgressed = false;
 
         // Lists
         this.thugs = [];
@@ -1903,6 +2011,14 @@ class RetroGameController {
         this.platforms = data.platforms.map(p => ({...p}));
         this.destructibles = data.destructibles.map(d => new DestructibleObject(d.x, d.y, d.type, d.content));
         this.items = [];
+        
+        if (lvlNum === 1) {
+            this.cageState = 'intact'; // 'intact', 'falling', 'broken'
+            this.levelProgressed = false;
+        } else {
+            this.cageState = 'broken';
+            this.levelProgressed = true;
+        }
     }
 
     advanceLevel() {
@@ -2507,7 +2623,7 @@ class RetroGameController {
         }
 
         // Play / Stop Stage 1 chiptune background music
-        if (this.gameState === 'playing' && this.currentLevel === 1) {
+        if (this.gameState === 'playing' && this.currentLevel === 1 && this.levelProgressed) {
             gameAudio.startBGM();
         } else {
             gameAudio.stopBGM();
@@ -2644,13 +2760,76 @@ class RetroGameController {
             }
         }
 
+        // Cage Breakout Lock & Break Logic
+        if (this.currentLevel === 1 && this.cageState === 'intact') {
+            this.player.x = 100;
+            this.player.y = this.groundY;
+            this.player.vx = 0;
+            this.player.vy = 0;
+            this.player.isDucking = false;
+            if (this.player.state !== 'attacking') {
+                this.player.state = 'idle';
+            }
+            
+            if (this.player.state === 'attacking' && this.player.stateTimer === 10) {
+                this.cageState = 'broken';
+                gameAudio.playBarsDrop();
+                
+                // Spawn falling cage bars as debris
+                for (let i = 0; i < 5; i++) {
+                    const barX = 100 - 30 + i * 15 + (Math.random() - 0.5) * 5;
+                    const barY = this.player.y + this.player.height - 60;
+                    const vx = (Math.random() - 0.5) * 4;
+                    const vy = -3 - Math.random() * 4;
+                    this.debris.push(new CageBarDebris(barX, barY, vx, vy));
+                }
+                
+                // Spawn sparks / dust particles
+                for (let p = 0; p < 15; p++) {
+                    this.particles.push({
+                        x: 120 + (Math.random() - 0.5) * 60,
+                        y: this.player.y + this.player.height - 50 + (Math.random() - 0.5) * 50,
+                        vx: (Math.random() - 0.5) * 6,
+                        vy: (Math.random() - 0.5) * 6 - 2,
+                        color: '#e5e7eb',
+                        size: 2 + Math.random() * 3,
+                        life: 1.0,
+                        decay: 0.02 + Math.random() * 0.03,
+                        update() {
+                            this.x += this.vx;
+                            this.y += this.vy;
+                            this.vy += 0.15; // gravity
+                            this.life -= this.decay;
+                        },
+                        draw(ctx, scrollOffset) {
+                            ctx.save();
+                            ctx.globalAlpha = Math.max(0, this.life);
+                            ctx.fillStyle = this.color;
+                            ctx.beginPath();
+                            ctx.arc(this.x - scrollOffset, this.y, this.size, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.restore();
+                        }
+                    });
+                }
+                this.screenShake = 12;
+            }
+        }
+
+        // Check if Craig progresses (moves right past the starting area)
+        if (this.currentLevel === 1 && this.cageState === 'broken' && !this.levelProgressed) {
+            if (this.player.x > 130 || this.scrollOffset > 10) {
+                this.levelProgressed = true;
+            }
+        }
+
         // Calculate level completion progress
         this.gameProgress = this.scrollOffset / this.levelLength;
 
         // --- Enemies Spawning & Behavior ---
         
         // Spawn Regular Thugs
-        if (this.gameProgress < 1.0) {
+        if (this.gameProgress < 1.0 && this.levelProgressed) {
             this.thugSpawnTimer++;
             if (this.thugSpawnTimer > 90) {
                 this.thugSpawnTimer = 0;
@@ -3162,7 +3341,9 @@ class RetroGameController {
         if (this.boss) this.drawBoss();
 
         // Draw Player (Craig)
+        this.drawCageBack();
         this.drawCraig();
+        this.drawCageFront();
 
         // Draw Projectiles
         this.projectiles.forEach(p => p.draw(this.ctx, this.scrollOffset));
@@ -3675,6 +3856,101 @@ class RetroGameController {
         this.ctx.fillText("PRESS J, Z OR TAP ACTION BUTTON TO START NEXT STAGE", 400, 345);
 
         this.ctx.restore();
+    }
+
+    drawCageBack() {
+        if (this.currentLevel !== 1 || this.cageState !== 'intact') return;
+        const ctx = this.ctx;
+        ctx.save();
+        
+        const cageX = 120 - this.scrollOffset;
+        const cageY = 415;
+        const w = 100;
+        const h = 140;
+        
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 4;
+        
+        // Back wall dark background
+        ctx.fillStyle = 'rgba(27, 27, 27, 0.6)';
+        ctx.beginPath();
+        ctx.rect(cageX - w/2, cageY - h, w, h);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Back horizontal bars
+        ctx.fillStyle = '#374151'; // dark grey
+        for (let i = 1; i <= 3; i++) {
+            ctx.beginPath();
+            ctx.rect(cageX - w/2, cageY - (h / 4) * i - 3, w, 6);
+            ctx.fill();
+            ctx.stroke();
+        }
+        
+        ctx.restore();
+    }
+
+    drawCageFront() {
+        if (this.currentLevel !== 1 || this.cageState !== 'intact') return;
+        const ctx = this.ctx;
+        ctx.save();
+        
+        const cageX = 120 - this.scrollOffset;
+        const cageY = 415;
+        const w = 100;
+        const h = 140;
+        
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 4;
+        
+        // Front vertical bars (5 bars)
+        ctx.fillStyle = '#9ca3af'; // light steel grey
+        for (let i = 0; i < 5; i++) {
+            const barX = cageX - w/2 + 10 + i * (w - 20) / 4;
+            ctx.beginPath();
+            ctx.rect(barX - 4, cageY - h, 8, h);
+            ctx.fill();
+            ctx.stroke();
+        }
+        
+        // Top and bottom horizontal reinforcement plates
+        ctx.fillStyle = '#4b5563'; // medium steel grey
+        ctx.beginPath();
+        ctx.rect(cageX - w/2, cageY - h, w, 12);
+        ctx.rect(cageX - w/2, cageY - 12, w, 12);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Huge padlock in the center
+        const padX = cageX;
+        const padY = cageY - h / 2;
+        
+        // Shackle
+        ctx.strokeStyle = '#6b7280';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(padX, padY - 8, 12, Math.PI, 0);
+        ctx.stroke();
+        
+        // Lock body (yellow brass)
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3.5;
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.roundRect(padX - 14, padY - 6, 28, 22, [4]);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Keyhole
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        ctx.arc(padX, padY + 2, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.rect(padX - 1.5, padY + 4, 3, 6);
+        ctx.fill();
+        
+        ctx.restore();
     }
 
     // --- Drawing Characters ---
