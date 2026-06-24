@@ -1384,6 +1384,54 @@ class KnifeProjectile {
     }
 }
 
+// Glowing Ki/fire projectile shot by player when attacking in mid-air
+class KiBlastProjectile {
+    constructor(x, y, vx, vy, isPlayerOwned = true) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.isPlayerOwned = isPlayerOwned;
+        this.width = 24;
+        this.height = 12;
+        this.age = 0;
+        this.maxAge = 120; // 2 seconds
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.age++;
+    }
+
+    draw(ctx, scrollOffset) {
+        ctx.save();
+        ctx.translate(this.x - scrollOffset, this.y);
+        if (this.vx < 0) {
+            ctx.scale(-1, 1);
+        }
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#f97316'; // orange fire glow
+        
+        // Draw a glowing fire bullet
+        ctx.fillStyle = '#fdba74'; // light orange core
+        ctx.beginPath();
+        ctx.arc(0, 0, 6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#ef4444'; // red-orange flame tail
+        ctx.beginPath();
+        ctx.moveTo(-6, 0);
+        ctx.lineTo(-18, -4);
+        ctx.lineTo(-14, 0);
+        ctx.lineTo(-18, 4);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.restore();
+    }
+}
+
 class PowerWaveProjectile {
     constructor(x, y, vx, vy, isPlayerOwned = true, type = 'punch') {
         this.x = x;
@@ -2381,6 +2429,25 @@ class RetroGameController {
         this.player.attackType = type;
         this.player.stateTimer = 10; // attack lasts 10 frames
         
+        if (this.player.y < this.groundY) {
+            // Airborne attack: Craig shoots a Ki Blast!
+            gameAudio.playSlice(); // shoot/throw sound
+            const kVx = this.player.facing * 8.5;
+            this.projectiles.push(new KiBlastProjectile(
+                this.player.x + (this.player.facing === 1 ? 40 : 5) + this.scrollOffset,
+                this.player.y + 30,
+                kVx,
+                0,
+                true // isPlayerOwned = true
+            ));
+            
+            // Spawn a visual slash effect in front of him
+            const hitX = this.player.x + (this.player.facing === 1 ? 55 : -15);
+            const hitY = this.player.y + 35;
+            this.slashes.push(new SliceSlashEffect(hitX, hitY, type === 'kick'));
+            return;
+        }
+
         if (this.player.isDucking) {
             if (type === 'punch' && this.player.knives > 0) {
                 this.player.knives--;
@@ -2456,16 +2523,7 @@ class RetroGameController {
                                      (this.player.facing === -1 && (thug.x - this.scrollOffset) < this.player.x);
 
             if (dist < range && yDist < 40 && correctDirection) {
-                // Slice Thug in half!
-                gameAudio.playSplatter();
-                this.player.score += 100;
-                this.screenShake = 6;
-                
-                // Spawn Gore
-                this.spawnGore(thug.x + thug.width/2, thug.y + thug.height/2, 'thug', thug.style);
-
-                // Remove Thug
-                this.thugs.splice(i, 1);
+                this.damageThug(thug, 1);
             }
         }
 
@@ -2536,6 +2594,41 @@ class RetroGameController {
                     this.boss.vy = -3;
                 }
             }
+        }
+    }
+
+    damageThug(thug, damageAmount) {
+        if (thug.state === 'dead') return;
+        thug.health -= damageAmount;
+        thug.flashTimer = 8;
+        
+        if (thug.health <= 0) {
+            thug.state = 'dead';
+            thug.deadTimer = 0;
+            // High upward knockback on death
+            thug.vx = (this.player.x < thug.x - this.scrollOffset) ? 5 : -5;
+            thug.vy = -6.5;
+            gameAudio.playSplatter();
+            this.player.score += 100;
+            this.screenShake = Math.max(this.screenShake, 6);
+            
+            // Spawn some blood spray
+            for (let i = 0; i < 15; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1.5 + Math.random() * 4;
+                this.particles.push(new BloodParticle(
+                    thug.x + thug.width/2,
+                    thug.y + thug.height/2,
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed - 2
+                ));
+            }
+        } else {
+            // Normal hit knockback (falling back)
+            thug.state = 'hurt';
+            thug.vx = (this.player.x < thug.x - this.scrollOffset) ? 4.5 : -4.5;
+            thug.vy = -4.0;
+            gameAudio.playPunch();
         }
     }
 
@@ -2882,7 +2975,8 @@ class RetroGameController {
             this.thugSpawnTimer++;
             if (this.thugSpawnTimer > 90) {
                 this.thugSpawnTimer = 0;
-                if (this.thugs.length < 3) {
+                const aliveThugsCount = this.thugs.filter(t => t.state !== 'dead').length;
+                if (aliveThugsCount < 1) {
                     // Spawn a thug from right edge
                     const isThrower = (this.currentLevel > 1 && Math.random() < 0.15 + this.currentLevel * 0.08);
                     this.thugs.push({
@@ -2894,7 +2988,15 @@ class RetroGameController {
                         facing: -1,
                         style: Math.floor(Math.random() * 5),
                         isKnifeThrower: isThrower,
-                        throwCooldown: 40 + Math.random() * 60
+                        throwCooldown: 40 + Math.random() * 60,
+                        health: 3,
+                        maxHealth: 3,
+                        vx: 0,
+                        vy: 0,
+                        state: 'normal',
+                        deadTimer: 0,
+                        alpha: 1.0,
+                        flashTimer: 0
                     });
                 }
             }
@@ -2913,6 +3015,34 @@ class RetroGameController {
         for (let i = this.thugs.length - 1; i >= 0; i--) {
             const thug = this.thugs[i];
             
+            if (thug.flashTimer > 0) thug.flashTimer--;
+            
+            if (thug.state === 'hurt' || thug.state === 'dead') {
+                thug.vy += 0.55; // gravity
+                thug.x += thug.vx;
+                thug.y += thug.vy;
+                thug.vx *= 0.95;
+                
+                // Ground collision
+                if (thug.y >= this.groundY) {
+                    thug.y = this.groundY;
+                    thug.vy = 0;
+                    thug.vx = 0;
+                    if (thug.state === 'hurt') {
+                        thug.state = 'normal';
+                    }
+                }
+                
+                if (thug.state === 'dead') {
+                    thug.deadTimer++;
+                    thug.alpha = Math.max(0, 1.0 - (thug.deadTimer / 600)); // fades over 10 seconds (600 frames)
+                    if (thug.deadTimer >= 600) {
+                        this.thugs.splice(i, 1);
+                    }
+                }
+                continue; // Skip AI/attacking behavior for hurt/dead thugs
+            }
+            
             // Thugs walk towards Craig or keep distance if throwers
             const dist = Math.abs((this.player.x + this.player.width/2) - (thug.x - this.scrollOffset + thug.width/2));
             const yDist = Math.abs(this.player.y - thug.y);
@@ -2930,13 +3060,23 @@ class RetroGameController {
                     thug.throwCooldown--;
                     if (thug.throwCooldown <= 0) {
                         thug.throwCooldown = 110 + Math.random() * 80;
+                        
                         // Throw knife
-                        const kVx = thug.facing * 5.5;
+                        const kVx = thug.facing * 2.8; // slowed speed
+                        const dx = Math.abs((this.player.x + this.player.width/2) - (thug.x - this.scrollOffset + thug.width/2));
+                        let kVy = 0;
+                        // Aim towards Craig if Craig is airborne/jumping
+                        if (this.player.y < this.groundY && dx > 10) {
+                            const timeToTarget = dx / Math.abs(kVx);
+                            kVy = ((this.player.y + this.player.height/2) - (thug.y + 30)) / timeToTarget;
+                            kVy = Math.max(-2.5, Math.min(2.5, kVy)); // clamp to keep it slow & dodgeable
+                        }
+                        
                         this.projectiles.push(new KnifeProjectile(
                             thug.x + (thug.facing === 1 ? 40 : -10),
                             thug.y + 30,
                             kVx,
-                            0,
+                            kVy,
                             false
                         ));
                     }
@@ -3024,7 +3164,7 @@ class RetroGameController {
                 this.boss.throwTimer--;
                 if (this.boss.throwTimer <= 0) {
                     this.boss.throwTimer = 110 + Math.random() * 60; // 2-3 seconds
-                    const bVx = this.boss.facing * 6.5;
+                    const bVx = this.boss.facing * 3.2; // Slowed down from 6.5 for dodgeability
                     
                     if (this.boss.style === 'biker-boss') {
                         // Biker Boss throws dual knives: one straight, one angled downwards!
@@ -3047,7 +3187,7 @@ class RetroGameController {
                         this.projectiles.push(new KnifeProjectile(
                             this.boss.x + (this.boss.facing === 1 ? 50 : -10),
                             this.boss.y + 25,
-                            bVx * 1.2,
+                            this.boss.facing * 3.5, // Slowed down from bVx * 1.2
                             0,
                             false
                         ));
@@ -3114,10 +3254,8 @@ class RetroGameController {
                         
                         if (dist < 45 && yDist < 50) {
                             proj.hits.add(thug);
-                            gameAudio.playSplatter();
                             this.player.score += 200;
-                            this.spawnGore(thug.x + thug.width/2, thug.y + thug.height/2, 'thug', thug.style);
-                            this.thugs.splice(j, 1);
+                            this.damageThug(thug, 2.5);
                             this.screenShake = Math.max(this.screenShake, 8);
                         }
                     }
@@ -3150,7 +3288,7 @@ class RetroGameController {
                             }
                         }
                     }
-
+ 
                     // Check destructibles
                     for (let j = this.destructibles.length - 1; j >= 0; j--) {
                         const dest = this.destructibles[j];
@@ -3187,16 +3325,15 @@ class RetroGameController {
                         destroyed = true;
                     }
                 } else {
-                    // Regular player projectile (knife)
+                    // Regular player projectile (knife or KiBlast)
+                    const damage = (proj instanceof KiBlastProjectile) ? 0.8 : 1.0;
                     for (let j = this.thugs.length - 1; j >= 0; j--) {
                         const thug = this.thugs[j];
                         const dist = Math.abs(proj.x - (thug.x + thug.width/2));
                         const yDist = Math.abs(proj.y - (thug.y + thug.height/2));
                         if (dist < 25 && yDist < 40) {
-                            gameAudio.playSplatter();
                             this.player.score += 150;
-                            this.spawnGore(thug.x + thug.width/2, thug.y + thug.height/2, 'thug', thug.style);
-                            this.thugs.splice(j, 1);
+                            this.damageThug(thug, damage);
                             destroyed = true;
                             break;
                         }
@@ -3206,7 +3343,7 @@ class RetroGameController {
                         const dist = Math.abs(proj.x - (this.boss.x + this.boss.width/2));
                         const yDist = Math.abs(proj.y - (this.boss.y + this.boss.height/2));
                         if (dist < 30 && yDist < 50) {
-                            this.boss.health--;
+                            this.boss.health -= damage;
                             this.boss.flashTimer = 8;
                             gameAudio.playSplatter();
                             destroyed = true;
@@ -4566,6 +4703,10 @@ class RetroGameController {
             this.ctx.save();
             this.ctx.translate(feetX, feetY);
             
+            if (thug.alpha !== undefined) {
+                this.ctx.globalAlpha = thug.alpha;
+            }
+            
             const defaultFacing = sprite.defaultFacing || -1;
             if (thug.facing !== defaultFacing) {
                 this.ctx.scale(-1, 1);
@@ -4585,6 +4726,11 @@ class RetroGameController {
             const drawH = activeCanvas.height * baseScale;
             const drawY = -(sprite.anchorY || 985) * baseScale;
             
+            if (thug.state === 'dead') {
+                this.ctx.rotate(-Math.PI / 2);
+                this.ctx.translate(0, -drawW / 2);
+            }
+            
             this.ctx.drawImage(activeCanvas, -drawW / 2, drawY, drawW, drawH);
             this.ctx.restore();
         } else {
@@ -4594,7 +4740,19 @@ class RetroGameController {
 
     drawThugVector(thug) {
         this.ctx.save();
-        this.ctx.translate(thug.x - this.scrollOffset, thug.y);
+        
+        if (thug.alpha !== undefined) {
+            this.ctx.globalAlpha = thug.alpha;
+        }
+
+        if (thug.state === 'dead') {
+            // Rotate around bottom-center of thug
+            this.ctx.translate(thug.x - this.scrollOffset + thug.width / 2, thug.y + thug.height);
+            this.ctx.rotate(-Math.PI / 2);
+            this.ctx.translate(-thug.width / 2, -thug.height);
+        } else {
+            this.ctx.translate(thug.x - this.scrollOffset, thug.y);
+        }
 
         if (thug.facing === 1) {
             this.ctx.scale(-1, 1);
